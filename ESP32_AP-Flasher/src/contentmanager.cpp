@@ -46,7 +46,7 @@
 
 bool needRedraw(uint8_t contentMode, uint8_t wakeupReason) {
     // contentmode 26, timestamp
-    if ((wakeupReason == WAKEUP_REASON_BUTTON1 || wakeupReason == WAKEUP_REASON_BUTTON2) && contentMode == 26) return true;
+    if ((wakeupReason == WAKEUP_REASON_BUTTON1 || wakeupReason == WAKEUP_REASON_BUTTON2 || wakeupReason == WAKEUP_REASON_BUTTON3) && contentMode == 26) return true;
     return false;
 }
 
@@ -64,10 +64,11 @@ void contentRunner() {
         const bool isAp = memcmp(taginfo->mac, wifimac, 8) == 0;
         if (taginfo->RSSI &&
             (now >= taginfo->nextupdate || needRedraw(taginfo->contentMode, taginfo->wakeupReason)) &&
-            config.runStatus == RUNSTATUS_RUN && (taginfo->expectedNextCheckin < now + 300 || isAp) &&
-             Storage.freeSpace() > 31000 && !util::isSleeping(config.sleepTime1, config.sleepTime2)) {
-            drawNew(taginfo->mac, taginfo);
-            taginfo->wakeupReason = 0;
+            config.runStatus == RUNSTATUS_RUN && 
+            (taginfo->expectedNextCheckin < now + 300 || isAp || (wsClientCount() && config.stopsleep == 1)) &&
+            Storage.freeSpace() > 31000 && !util::isSleeping(config.sleepTime1, config.sleepTime2)) {
+                drawNew(taginfo->mac, taginfo);
+                taginfo->wakeupReason = 0;
         }
 
         if (taginfo->expectedNextCheckin > now - 10 && taginfo->expectedNextCheckin < now + 30 && taginfo->pendingIdle == 0 && taginfo->pendingCount == 0 && !isAp) {
@@ -336,7 +337,7 @@ void drawNew(const uint8_t mac[8], tagRecord *&taginfo) {
 
         case 1:  // Today
 
-            drawDate(filename, taginfo, imageParams);
+            drawDate(filename, cfgobj, taginfo, imageParams);
             taginfo->nextupdate = util::getMidnightTime();
             updateTagImage(filename, mac, (taginfo->nextupdate - now) / 60 - 10, taginfo, imageParams);
             break;
@@ -790,7 +791,41 @@ void initSprite(TFT_eSprite &spr, int w, int h, imgParam &imageParams) {
     spr.fillSprite(TFT_WHITE);
 }
 
-void drawDate(String &filename, tagRecord *&taginfo, imgParam &imageParams) {
+String utf8FromCodepoint(uint16_t cp) {
+    char buf[4] = {0}; 
+    if (cp < 0x80) {
+        buf[0] = cp;
+    } else if (cp < 0x800) {
+        buf[0] = 0xC0 | (cp >> 6);
+        buf[1] = 0x80 | (cp & 0x3F);
+    } else {
+        buf[0] = 0xE0 | ((cp >> 12) & 0x0F);
+        buf[1] = 0x80 | ((cp >> 6) & 0x3F);
+        buf[2] = 0x80 | (cp & 0x3F);
+    }
+    return String(buf);
+}
+
+String formatUtcToLocal(const String &s) {
+    int h, m, ss = 0;
+    if (sscanf(s.c_str(), "%d:%d:%d", &h, &m, &ss) < 2 || h > 23 || m > 59 || ss > 59)
+        return "-";
+
+    time_t n = time(nullptr);
+    struct tm tm = *localtime(&n);
+    tm.tm_hour = h;
+    tm.tm_min = m;
+    tm.tm_sec = ss;
+
+    time_t utc = mktime(&tm) - _timezone + (tm.tm_isdst ? 3600 : 0);
+    localtime_r(&utc, &tm);
+
+    char buf[6];
+    snprintf(buf, 6, "%02d:%02d", tm.tm_hour, tm.tm_min);
+    return buf;
+}
+
+void drawDate(String &filename, JsonObject &cfgobj, tagRecord *&taginfo, imgParam &imageParams) {
     time_t now;
     time(&now);
     struct tm timeinfo;
@@ -811,19 +846,48 @@ void drawDate(String &filename, tagRecord *&taginfo, imgParam &imageParams) {
     TFT_eSprite spr = TFT_eSprite(&tft);
     initSprite(spr, imageParams.width, imageParams.height, imageParams);
 
-    const auto &date = loc["date"];
-    const auto &weekday = loc["weekday"];
-    if (date) {
+    auto date = loc["date"];
+    auto weekday = loc["weekday"];
+    const auto &month = loc["month"];
+    const auto &day = loc["day"];
+
+    if (cfgobj["location"]) {
+        const String lat = cfgobj["#lat"];
+        const String lon = cfgobj["#lon"];
+        JsonDocument doc;
+
+        const bool success = util::httpGetJson("https://api.farmsense.net/v1/daylengths/?d=" + String(now) + "&lat=" + lat + "&lon=" + lon + "&tz=UTC", doc, 5000);
+        if (success && loc["sunrise"].is<JsonArray>()) {
+            String sunrise = formatUtcToLocal(doc[0]["Sunrise"]);
+            String sunset = formatUtcToLocal(doc[0]["Sunset"]);
+            const auto &sunriseicon = loc["sunrise"];
+            const auto &sunseticon = loc["sunset"];
+            drawString(spr, String("\uF046 "), sunriseicon[0], sunriseicon[1].as<int>(), "/fonts/weathericons.ttf", TR_DATUM, TFT_BLACK, sunriseicon[3]);
+            drawString(spr, String("\uF047 "), sunseticon[0], sunseticon[1].as<int>(), "/fonts/weathericons.ttf", TR_DATUM, TFT_BLACK, sunseticon[3]);
+            drawString(spr, sunrise, sunriseicon[0], sunriseicon[1], sunriseicon[2], TL_DATUM, TFT_BLACK, sunriseicon[3]);
+            drawString(spr, sunset, sunseticon[0], sunseticon[1], sunseticon[2], TL_DATUM, TFT_BLACK, sunseticon[3]);
+
+            const bool success = util::httpGetJson("https://api.farmsense.net/v1/moonphases/?d=" + String(now), doc, 5000);
+            if (success && loc["moonicon"].is<JsonArray>()) {
+                uint8_t moonage = doc[0]["Index"].as<int>();
+                const auto &moonicon = loc["moonicon"];
+                uint16_t moonIconId = 0xf095 + moonage;
+                String moonIcon = utf8FromCodepoint(moonIconId);
+                drawString(spr, moonIcon, moonicon[0], moonicon[1], "/fonts/weathericons.ttf", TC_DATUM, TFT_BLACK, moonicon[2]);
+            }
+
+            date = loc["altdate"];
+            weekday = loc["altweekday"];
+        }
+    }
+    if (date.is<JsonArray>()) {
         drawString(spr, languageDays[timeinfo.tm_wday], weekday[0], weekday[1], weekday[2], TC_DATUM, imageParams.highlightColor, weekday[3]);
         drawString(spr, String(timeinfo.tm_mday) + " " + languageMonth[timeinfo.tm_mon], date[0], date[1], date[2], TC_DATUM, TFT_BLACK, date[3]);
     } else {
-        const auto &month = loc["month"];
-        const auto &day = loc["day"];
         drawString(spr, languageDays[timeinfo.tm_wday], weekday[0], weekday[1], weekday[2], TC_DATUM, TFT_BLACK, weekday[3]);
         drawString(spr, String(languageMonth[timeinfo.tm_mon]), month[0], month[1], month[2], TC_DATUM, TFT_BLACK, month[3]);
         drawString(spr, String(timeinfo.tm_mday), day[0], day[1], day[2], TC_DATUM, imageParams.highlightColor, day[3]);
     }
-
     spr2buffer(spr, filename, imageParams);
     spr.deleteSprite();
 }
@@ -2201,7 +2265,7 @@ int getJsonTemplateUrl(String &filename, String URL, time_t fetched, String MAC,
     http.addHeader("If-Modified-Since", formatHttpDate(fetched));
     http.addHeader("X-ESL-MAC", MAC);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(5000);
+    http.setTimeout(20000);
     const int httpCode = http.GET();
     if (httpCode == 200) {
         drawJsonStream(http.getStream(), filename, taginfo, imageParams);
