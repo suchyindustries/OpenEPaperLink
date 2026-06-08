@@ -189,6 +189,16 @@
         }
       },
       {
+        "key": "forecast_type",
+        "name": "API / Layout",
+        "desc": "Select forecast data provider screen layout type",
+        "type": "select",
+        "options": {
+          "0": "-Classic open-metro.com",
+          "1": "openweathermap.org"
+        }
+      },
+      {
         "key": "#lat",
         "name": "Lat",
         "desc": "Latitude (set automatic when generating image)",

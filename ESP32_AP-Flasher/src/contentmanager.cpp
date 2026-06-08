@@ -1079,8 +1079,37 @@ void drawWeather(String &filename, JsonObject &cfgobj, const tagRecord *taginfo,
     spr.deleteSprite();
 }
 
-#if 0
-void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo, imgParam &imageParams) {{
+bool OwmWeather(TFT_eSprite &spr,JsonObject &cfgobj,const tagRecord *taginfo,imgParam &imageParams);
+void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo, imgParam &imageParams) 
+{
+   TFT_eSprite spr = TFT_eSprite(&tft);
+   initSprite(spr, imageParams.width, imageParams.height, imageParams);
+
+   String forecast_type = cfgobj["forecast_type"];
+
+   if (!util::isEmptyOrNull(forecast_type)) {
+       LOG("forecast_type %s\n",forecast_type.c_str());
+       if (cfgobj["forecast_type"].as<int>() == 1) {
+       // Save ts_option
+          uint8_t ts_option = imageParams.ts_option;
+       // Don't add timestamp to our display, OwmWeather draws it's own
+          imageParams.ts_option = 0;
+
+          if(OwmWeather(spr,cfgobj,taginfo,imageParams)) {
+          // weather drawn successfully
+             spr2buffer(spr, filename, imageParams);
+             spr.deleteSprite();
+             imageParams.ts_option = ts_option;
+             return;
+          }
+          else {
+             wsLog("OWM weather update failed");
+             LOG("OWM weather update failed\n");
+          }
+          imageParams.ts_option = ts_option;
+       }
+   }
+
     wsLog("get weather");
     getLocation(cfgobj);
 
@@ -1098,12 +1127,10 @@ void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo
         return;
     }
 
-    TFT_eSprite spr = TFT_eSprite(&tft);
     tft.setTextWrap(false, false);
 
     JsonDocument loc;
     getTemplate(loc, 8, taginfo->hwType);
-    initSprite(spr, imageParams.width, imageParams.height, imageParams);
 
     if (loc["temp"]) drawWeatherContent(doc, loc, spr, cfgobj, imageParams, true);
 
@@ -1169,22 +1196,6 @@ void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo
     spr2buffer(spr, filename, imageParams);
     spr.deleteSprite();
 }
-#else
-bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, imgParam &imageParams);
-void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo, imgParam &imageParams) 
-{
-   TFT_eSprite spr = TFT_eSprite(&tft);
-   initSprite(spr, imageParams.width, imageParams.height, imageParams);
-   if(OwmWeather(spr,cfgobj,taginfo,imageParams)) {
-      spr2buffer(spr, filename, imageParams);
-   }
-   else {
-      wsLog("OWM weather update failed");
-   }
-   spr.deleteSprite();
-}
-
-#endif
 
 int getImgURL(String &filename, String URL, time_t fetched, imgParam &imageParams, String MAC) {
     // https://images.klari.net/kat-bw29.jpg

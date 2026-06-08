@@ -908,6 +908,17 @@ document.addEventListener("loadTab", function (event) {
 });
 
 $('#apcfgsave').onclick = function () {
+	const apiKey = $('#owm_api_key').value.trim();
+	if (apiKey != 0) {
+		const hexRegExp = /^[0-9A-Fa-f]{32}$/;
+		const isKey = hexRegExp.test(apiKey);
+		if(!isKey) {
+			console.log('Api key ' + apiKey + ' is invalid');
+			$('#apcfgmsg').innerHTML = 'Error: OWM API key is invalid.\r\nValid API keys are 32 hex characters';
+			return;
+		}
+	}
+
 	let formData = new FormData();
 	formData.append("alias", $('#apcfgalias').value);
 	formData.append("channel", $('#apcfgchid').value);
@@ -927,7 +938,7 @@ $('#apcfgsave').onclick = function () {
 	formData.append('sleeptime2', $('#apcnight2').value);
 	formData.append('discovery', $('#apcdiscovery').value);
 	formData.append('showtimestamp', $('#apcshowtimestamp').value);
-	formData.append('owm_api_key', $('#owm_api_key').value);
+	formData.append('owm_api_key', apiKey);
 	fetch("save_apcfg", {
 		method: "POST",
 		body: formData
