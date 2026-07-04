@@ -938,7 +938,7 @@ $('#apcfgsave').onclick = function () {
 	formData.append('sleeptime2', $('#apcnight2').value);
 	formData.append('discovery', $('#apcdiscovery').value);
 	formData.append('showtimestamp', $('#apcshowtimestamp').value);
-	formData.append('owm_api_key', apiKey);
+	formData.append('owm_api_key', $('#owm_api_key').value);
 	fetch("save_apcfg", {
 		method: "POST",
 		body: formData
