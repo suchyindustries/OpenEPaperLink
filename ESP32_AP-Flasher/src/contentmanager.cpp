@@ -42,7 +42,6 @@
 #include "util.h"
 #include "web.h"
 
-#include <DrawOWM.h>
 #define ENABLE_LOGGING  1
 #if ENABLE_LOGGING && __has_include("logging.h") 
 #include "logging.h"
@@ -1085,6 +1084,7 @@ void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo
    TFT_eSprite spr = TFT_eSprite(&tft);
    initSprite(spr, imageParams.width, imageParams.height, imageParams);
 
+#ifndef WITHOUT_OWM
    String forecast_type = cfgobj["forecast_type"];
 
    if (!util::isEmptyOrNull(forecast_type)) {
@@ -1109,6 +1109,7 @@ void drawForecast(String &filename, JsonObject &cfgobj, const tagRecord *taginfo
           imageParams.ts_option = ts_option;
        }
    }
+#endif // WITHOUT_OWM
 
     wsLog("get weather");
     getLocation(cfgobj);

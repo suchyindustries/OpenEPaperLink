@@ -1,3 +1,4 @@
+#ifndef WITHOUT_OWM
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -325,3 +326,5 @@ bool HttpQuery(String &url,String &Response)
 
    return Ret;
 }
+#endif // WITHOUT_OWM
+
