@@ -3,6 +3,7 @@
 #include <HTTPClient.h>
 #include <FS.h>
 #include <DrawOWM.h>
+#include <timezonedb_lookup.h>
 
 #include "tag_db.h"
 #include "makeimage.h"
@@ -110,6 +111,13 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
    JsonDocument doc;
    JsonObject languageObject;
    OwmConfig Config;
+   char *TzSave = getenv("TZ");
+   String IANA_tz = cfgobj["#tz"];
+   IANA_tz.replace('_',' ');
+   auto posix_tz = lookup_posix_timezone_tz(IANA_tz.c_str());
+   if(posix_tz) {
+      setenv("TZ",posix_tz,1);
+   }
 
 // Don't add timestamp to our display, we draw our own
    imageParams.ts_option = 0; 
@@ -283,6 +291,7 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       delete owm;
       Ret = true;
    } while(false);
+   setenv("TZ",TzSave,1);
 
    return Ret;
 }
