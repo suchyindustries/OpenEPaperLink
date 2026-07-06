@@ -1132,7 +1132,8 @@ function contentselected() {
 						});
 					break;
 				case 'select':
-				case 'chanselect':
+			    case 'chanselect':
+				case 'apiselect':
 					input = document.createElement("select");
 					let options;
 					if (element.type == 'chanselect') {
@@ -1158,6 +1159,9 @@ function contentselected() {
 							optionElement.selected = false;
 						}
 						input.appendChild(optionElement);
+					}
+					if (element.type == 'apiselect' && apConfig.owm_api_key == 0) {
+						input.disabled = true;
 					}
 					break;
 				case 'geoselect':

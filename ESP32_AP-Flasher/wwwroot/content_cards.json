@@ -159,7 +159,7 @@
   {
     "id": 8,
     "name": "Weather forecast",
-    "desc": "Weather forecast for the next five days. Weather data by Open-Meteo.com. Parameters Lat, Lon and Time Zone are filled automatically from the entered location. In case of an ambiguous location, choose from the drop down list.",
+    "desc": "Weather forecast for the next five days. Parameters Lat, Lon and Time Zone are filled automatically from the entered location. In case of an ambiguous location, choose from the drop down list.",
     "param": [
       {
         "key": "location",
@@ -190,11 +190,11 @@
       },
       {
         "key": "forecast_type",
-        "name": "API / Layout",
-        "desc": "Select forecast data provider screen layout type",
-        "type": "select",
+        "name": "Style",
+        "desc": "Select forecast data provider and screen layout style",
+        "type": "apiselect",
         "options": {
-          "0": "-Classic open-metro.com",
+          "0": "-open-metro.com",
           "1": "openweathermap.org"
         }
       },
