@@ -1845,6 +1845,7 @@ $('#taglist').addEventListener('contextmenu', (e) => {
 				contextMenuOptions.push(
 					{ id: 'scan', label: 'Scan channels' },
 					{ id: 'reboot', label: 'Reboot tag' },
+					{ id: 'deepsleep', label: 'Deep sleep tag' },
 				);
 			};
 			if (tagTypes[hwtype]?.options?.includes("led")) {
