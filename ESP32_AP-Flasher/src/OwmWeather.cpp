@@ -12,6 +12,7 @@
 #include "contentmanager.h"
 #include "web.h"
 #include "storage.h"
+#include "NoaaTides.h"
 
 #define ENABLE_LOGGING  1
 #if ENABLE_LOGGING && __has_include("logging.h") 
@@ -61,6 +62,8 @@ const LookupTbl_t LookupTbl[] = {
    {"TXT_INDOOR_HUMIDITY",&Strings.TXT_INDOOR_HUMIDITY},
    {"TXT_DEWPOINT",&Strings.TXT_DEWPOINT},
    {"TXT_MOONPHASE",&Strings.TXT_MOONPHASE},
+   {"TXT_LOWTIDE",&Strings.TXT_LOWTIDE},
+   {"TXT_HIGHTIDE",&Strings.TXT_HIGHTIDE},
    {"TXT_NEW_MOON",&Strings.TXT_NEW_MOON},
    {"TXT_WAXING_CRESCENT",&Strings.TXT_WAXING_CRESCENT},
    {"TXT_FIRST_QUARTER",&Strings.TXT_FIRST_QUARTER},
@@ -105,6 +108,7 @@ const LookupTbl_t LookupTbl[] = {
 };
 
 bool HttpQuery(String &url,String &Response);
+int AddNoaaTides(OwmConfig &Config,String &StationID);
 
 bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, imgParam &imageParams)
 {
@@ -119,6 +123,7 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
    if(posix_tz) {
       setenv("TZ",posix_tz,1);
    }
+   //serializeJsonPretty(cfgobj,Serial);
 
 // Don't add timestamp to our display, we draw our own
    imageParams.ts_option = 0; 
@@ -142,18 +147,20 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       Config.City = City.c_str();
       Config.bMetric = cfgobj["units"] == "0";
 
-      Config.WindSpeed = Config.bMetric ? UNITS_SPEED_KILOMETERSPERHOUR : 
-                     UNITS_SPEED_MILESPERHOUR;
-      Config.DistanceType = Config.bMetric ? UNITS_DIST_KILOMETERS : UNITS_DIST_MILES;
-      Config.PrecipType = Config.bMetric ? UNITS_DAILY_PRECIP_MILLIMETERS : 
-                                       UNITS_DAILY_PRECIP_INCHES;
-
-      Config.PrecipHrType = Config.bMetric ? UNITS_HOURLY_PRECIP_MILLIMETERS :
-                                         UNITS_HOURLY_PRECIP_INCHES;
-      Config.PressureType = Config.bMetric ? UNITS_PRES_MILLIBARS :
-                                         UNITS_PRES_INCHESOFMERCURY;
-
-      Config.bDisplayAlerts = Config.bMetric ? false : true;
+      if(Config.bMetric) {
+         Config.WindSpeed = UNITS_SPEED_KILOMETERSPERHOUR;
+         Config.DistanceType = UNITS_DIST_KILOMETERS;
+         Config.PrecipType = UNITS_DAILY_PRECIP_MILLIMETERS;
+         Config.PrecipHrType = UNITS_HOURLY_PRECIP_MILLIMETERS;
+         Config.PressureType = UNITS_PRES_MILLIBARS;
+      }
+      else {
+         Config.WindSpeed = UNITS_SPEED_MILESPERHOUR;
+         Config.DistanceType = UNITS_DIST_MILES;
+         Config.PrecipType = UNITS_DAILY_PRECIP_INCHES;
+         Config.PrecipHrType = UNITS_HOURLY_PRECIP_INCHES;
+         Config.PressureType = UNITS_PRES_INCHESOFMERCURY;
+      }
 
       Config.inTemp         = taginfo->temperature;
       Config.Rssi           = taginfo->RSSI;
@@ -168,16 +175,18 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       Config.PosSunset       = 1;
       Config.PosWind         = 2;
       Config.PosHumidity     = 3;
-      Config.PosUvi          = 4;
-      Config.PosPressure     = 5;
-      Config.PosAirQuality   = 6;
-      Config.PosVisibility   = 7;
-      Config.PosIntemp       = 8;
-      Config.PosDewpoint     = 9;
+      Config.PosAirQuality   = 4;
+      Config.PosVisibility   = 5;
+      Config.PosUvi          = 6;
+      Config.PosIntemp       = 7;
+      Config.PosDewpoint     = 8;
+      Config.PosPressure     = 9;
       Config.PosInhumidity   = -1;
       Config.PosMoonrise     = -1;
       Config.PosMoonset      = -1;
       Config.PosMoonphase    = -1;
+      Config.PosLastTide     = -1;
+      Config.PosNextTide     = -1;
 
       switch(Config.DisplayFormat) {
          case FORMAT_800X480:
@@ -189,12 +198,12 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
      // positions 6,7,8,9 are not available on the 640 x 384 display
             Config.DisplayWidth    = 640;
             Config.DisplayHeight   = 384;
-            Config.PosVisibility   = 4;
-            Config.PosIntemp       = 5;
-            Config.PosUvi          = -1;
+            Config.PosVisibility   = -1;  // Replace Visibility with Uvi
+            Config.PosUvi          = 5;
+            Config.PosIntemp       = -1;
+            Config.PosDewpoint     = -1;
             Config.PosPressure     = -1;
-            Config.PosAirQuality   = -1;
-            Config.PosInhumidity   = -1;
+
             break;
 
          case FORMAT_400X300:
@@ -202,6 +211,28 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
             Config.DisplayHeight   = 300;
             Config.bDisplayAlerts = false;   // no room
             break;
+      }
+
+      if(cfgobj["StationID"]) {
+         String StationID = cfgobj["StationID"].as<String>();
+         LOG("Calling AddNoaaTides for Station %s\n",StationID.c_str());
+         if(AddNoaaTides(Config,StationID)) {
+         // Got tide values
+            if(Config.DisplayFormat == FORMAT_640X384) {
+            // Replace AirQuality && Uvi with tides
+               Config.PosDewpoint = -1;
+               Config.PosUvi      = -1;
+               Config.PosLastTide = 4;
+               Config.PosNextTide = 5;
+            }
+            else {
+            // Replace Pressure & Dewpoint  with tides
+               Config.PosDewpoint = -1;
+               Config.PosPressure = -1;
+               Config.PosLastTide = 8;
+               Config.PosNextTide = 9;
+            }
+         }
       }
 
       Config.xOffset = (imageParams.width - Config.DisplayWidth) / 2;
@@ -250,7 +281,9 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
 
       class DrawOWM *owm = new DrawOWM(spr,Config);
       if(config.language) {
-      // Set locale
+      // Language != englisey, Set locale
+         Config.bDisplayAlerts = false;   // Alerts are only available in English
+
          JsonDocument filter;
          const char *Name;
          const LookupTbl_t *p = LookupTbl;
@@ -286,6 +319,9 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
             }
             owm->SetLocale(&Strings);
          } while(false);
+      }
+      else {
+         Config.bDisplayAlerts = true;
       }
 
       owm->DrawIt();
@@ -326,5 +362,40 @@ bool HttpQuery(String &url,String &Response)
 
    return Ret;
 }
+
+//   String StationID = "8446613"; // Wellfleet
+//   String StationID = "9415009"; // San Pedro
+int AddNoaaTides(OwmConfig &Config,String &StationID)
+{
+   HighLowArray_t TideEvents[2];
+   int Ret = 0;
+
+   LOG("StationID %s\n",StationID.c_str());
+   int Events = GetNoaaTides(StationID,TideEvents,2);
+   LOG("Got %d events\n",Events);
+   if(Events == 2) {
+      int LowTideEvent;
+      int HighTideEvent;
+      if(TideEvents[0].LowTide) {
+      // Last Tide was a low tide
+         LowTideEvent = 0;
+         HighTideEvent = 1;
+      }
+      else {
+      // Last Tide was a high tide
+         LowTideEvent = 0;
+         HighTideEvent = 1;
+      }
+      Config.LowTide = TideEvents[LowTideEvent].Time;
+      Config.LowTideHeight = TideEvents[LowTideEvent].Height;
+      Config.HighTide = TideEvents[HighTideEvent].Time;
+      Config.HighTideHeight = TideEvents[HighTideEvent].Height;
+      Ret = Events;
+   }
+
+   LOG("Returning %d\n",Ret);
+   return Ret;
+}
 #endif // WITHOUT_OWM
+
 
