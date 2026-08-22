@@ -383,8 +383,8 @@ int AddNoaaTides(OwmConfig &Config,String &StationID)
       }
       else {
       // Last Tide was a high tide
-         LowTideEvent = 0;
-         HighTideEvent = 1;
+         HighTideEvent = 0;
+         LowTideEvent = 1;
       }
       Config.LowTide = TideEvents[LowTideEvent].Time;
       Config.LowTideHeight = TideEvents[LowTideEvent].Height;
