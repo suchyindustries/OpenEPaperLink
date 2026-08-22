@@ -25,10 +25,9 @@
 //   String StationID = "8446613"; // Wellfleet
 //   String StationID = "9415009"; // San Pedro
 
-// if MaxValues == 2 then return last high/low tide and next high/low tide,
-// otherwise return yesterday's high/low tide, today's high/low tides and
-// the first high/low tide tomorrow.
-int GetNoaaTides(String StationID,HighLowArray_t *Results,int MaxValues)
+// Return tide predications for the last tide yesterday, the currnet tdies
+// for today plus the first tide tomorrow
+int GetNoaaTides(String StationID,std::vector<HighLowArray_t> &Tides)
 {
    time_t Now;
    time_t TideTime;
@@ -40,32 +39,22 @@ int GetNoaaTides(String StationID,HighLowArray_t *Results,int MaxValues)
    JsonDocument loc;
    int Yesterday = 0;
    int Today = 0;
-   int Tomorrow = 0;
    int Entries = 0;
    int Day;
    float Height;
-   float MinHeight = 1000.0;
-   float MaxHeight = -1000.0;
-   int Year;
-   int Month;
    int Hrs;
    int Mins;
    int MinsAfterMidnight;
    String DateTime;
    String TideType;
-   uint16_t StringWidth;
-   int LowTides = 0;
-   int HighTides = 0;
    int i;
-   int Ret = 0;
-
-   #define MAX_HIGH_LOW_ENTRIES    10
-   HighLowArray_t HighLowArray[MAX_HIGH_LOW_ENTRIES];
+   HighLowArray_t Values;
+   HighLowArray_t YesterdayValues;
 
    time(&Now);
    localtime_r(&Now,&TimeinfoToday);
 
-   LOG("Current time %d:%02d\n\n",TimeinfoToday.tm_hour,TimeinfoToday.tm_min);
+   LOG("Current time %s",ctime(&Now));
 
 // Begin predictions yesterday, ending tomorrow
    Now -= 24*60*60;
@@ -124,108 +113,64 @@ int GetNoaaTides(String StationID,HighLowArray_t *Results,int MaxValues)
       LOG("Day %d Hrs %d Mins %d\n",Day,Hrs,Mins);
       MinsAfterMidnight = Mins + (Hrs * 60);
 
-      if(Yesterday == 0) {
-         // Must be the first high/low from yesterday
-         LOG("Set Yesterday to %d\n",Day);
-         Yesterday = Day;
-      }
-      else if(Day != Yesterday && Today == 0) {
-      // must be today
-         Today = Day;
-         LOG("Set Today to %d\n",Day);
-         Entries++;
-      }
-      else if(Day != Yesterday && Day != Today) {
-         // Not yesterday or today, must be tomorrow
-         Tomorrow = Day;
-         LOG("Set Tomorrow to %d\n",Day);
-      }
+      Values.Height = Height;
+      Values.Hrs = Hrs;
+      Values.Mins = Mins;
+      Values.MinsAfterMidnight = MinsAfterMidnight;
+      Values.Time = TideTime;
 
-      if(Day == Yesterday) {
-         // Adjust time
-         MinsAfterMidnight -= (24 * 60);
-      }
-      else if(Day == Tomorrow) {
-         // Adjust time
-         MinsAfterMidnight += (24 * 60);
-      }
-      else if(Day != Today) {
-         LOG("Internal error Day %d\n",Day);
-      }
-
-      LOG("Set entry %d %f %d %d\n",Entries,Height,Mins,MinsAfterMidnight);
-
-      HighLowArray[Entries].Height = Height;
-      HighLowArray[Entries].Hrs = Hrs;
-      HighLowArray[Entries].Mins = Mins;
-      HighLowArray[Entries].MinsAfterMidnight = MinsAfterMidnight;
-      HighLowArray[Entries].Time = TideTime;
       if(TideType == "H") {
-         HighLowArray[Entries].LowTide = false;
-         if(Day == Today) {
-            HighTides++; // count it
-            if(MaxHeight < Height) {
-               MaxHeight = Height;
-               LOG("New MaxHeight %f\n",MaxHeight);
-            }
-         }
+         Values.LowTide = false;
       }
       else if(TideType == "L") {
-         HighLowArray[Entries].LowTide = true;
-         if(Day == Today) {
-            LowTides++; // count it
-            if(MinHeight > Height) {
-               MinHeight = Height;
-               LOG("New MinHeight %f\n",MinHeight);
-            }
-         }
+         Values.LowTide = true;
       }
       else {
-         LOG("Unknown tide type %s\n",TideType.c_str());
-      }
-
-      if(Day != Yesterday) {
-         // Just save the last value from yesterday
-         Entries++;
-      }
-
-      if(Day == Tomorrow) {
-         // We're done
+         ELOG("Unknown tide type %s\n",TideType.c_str());
          break;
       }
-   }
-
-   time(&Now);
-   if(MaxValues == 2) {
-   // just want last high/low tide and next high/low tide,
-      for(i = 1; i < Entries + 1; i++) {
-         if(HighLowArray[i].Time >= Now) {
-            Results[0] = HighLowArray[i - 1];
-            LOG("Next tide event is entry %d\n",i);
-            Results[1] = HighLowArray[i];
-
-            localtime_r(&Results[0].Time,&TimeinfoToday);
-            LOG("Last tide %d:%02d\n\n",TimeinfoToday.tm_hour,TimeinfoToday.tm_min);
-            localtime_r(&Results[1].Time,&TimeinfoToday);
-            LOG("Next tide %d:%02d\n\n",TimeinfoToday.tm_hour,TimeinfoToday.tm_min);
-
-            break;
+      if(Yesterday == 0 || Day == Yesterday) {
+         if(Yesterday == 0) {
+         // Must be the first high/low from yesterday
+            LOG("Set Yesterday to %d\n",Day);
+            Yesterday = Day;
          }
-         Ret = 2;
+         Values.MinsAfterMidnight -= (24 * 60);
+         YesterdayValues = Values;
+      }
+      else if(Day != Yesterday && (Today == 0 || Day == Today)) {
+      // must be today
+         if(Today == 0) {
+            Today = Day;
+            LOG("Set Today to %d\n",Day);
+         // Save yesterday's last value
+            Entries++;
+            Tides.push_back(YesterdayValues);
+         }
+         Entries++;
+         Tides.push_back(Values);
+      }
+      else {
+      // Not yesterday or today, must be tomorrow
+         Values.MinsAfterMidnight += (24 * 60);
+         Entries++;
+         Tides.push_back(Values);
+         break;   // we're done
       }
    }
-   else {
-      for(i = 0; i < Entries + 1; i++) {
-         Ret++;
-         if(Ret > MaxValues) {
-            ELOG("Results array is too small, %d < %d\n",MaxValues,Entries);
-            break;
-         }
-         Results[i] = HighLowArray[i];
-      }
+
+   LOG("Returning %d (%d) entries\n",Entries,Tides.size());
+
+   for(i = 0; i < Tides.size(); i++) {
+      LOG("%d: %f foot %s tide @ %d minutes after midnight t: %s\n",
+          i,
+          Tides[i].Height,
+          Tides[i].LowTide ? "low" : "high",
+          Tides[i].MinsAfterMidnight,
+          ctime(&Tides[i].Time));
    }
 
-   return Ret;
+   return Entries;
 }
 
 #endif // WITHOUT_NOAA_TIDES

@@ -5,6 +5,7 @@
 #include <FS.h>
 #include <DrawOWM.h>
 #include <timezonedb_lookup.h>
+#include <vector>
 
 #include "tag_db.h"
 #include "makeimage.h"
@@ -367,24 +368,36 @@ bool HttpQuery(String &url,String &Response)
 //   String StationID = "9415009"; // San Pedro
 int AddNoaaTides(OwmConfig &Config,String &StationID)
 {
-   HighLowArray_t TideEvents[2];
+   time_t Now;
+   std::vector<HighLowArray_t> TideEvents;
    int Ret = 0;
+   int i;
 
    LOG("StationID %s\n",StationID.c_str());
-   int Events = GetNoaaTides(StationID,TideEvents,2);
+   time(&Now);
+   int Events = GetNoaaTides(StationID,TideEvents);
    LOG("Got %d events\n",Events);
-   if(Events == 2) {
+   for(i = 0; i < Events; i++) {
+      if(TideEvents[i].Time > Now) {
+         break;
+      }
+   }
+
+   if(i == 0 || i == Events) {
+      ELOG("Internal error\n");
+   }
+   else {
       int LowTideEvent;
       int HighTideEvent;
-      if(TideEvents[0].LowTide) {
+      if(TideEvents[i-1].LowTide) {
       // Last Tide was a low tide
-         LowTideEvent = 0;
-         HighTideEvent = 1;
+         LowTideEvent = i - 1;
+         HighTideEvent = i;
       }
       else {
       // Last Tide was a high tide
-         HighTideEvent = 0;
-         LowTideEvent = 1;
+         HighTideEvent = i;
+         LowTideEvent = i - 1;
       }
       Config.LowTide = TideEvents[LowTideEvent].Time;
       Config.LowTideHeight = TideEvents[LowTideEvent].Height;
