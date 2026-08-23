@@ -371,33 +371,23 @@ int AddNoaaTides(OwmConfig &Config,String &StationID)
    time_t Now;
    std::vector<HighLowArray_t> TideEvents;
    int Ret = 0;
-   int i;
 
    LOG("StationID %s\n",StationID.c_str());
    time(&Now);
-   int Events = GetNoaaTides(StationID,TideEvents);
+   int Events = GetNoaaTides(StationID,TideEvents,Now);
    LOG("Got %d events\n",Events);
-   for(i = 0; i < Events; i++) {
-      if(TideEvents[i].Time > Now) {
-         break;
-      }
-   }
-
-   if(i == 0 || i == Events) {
-      ELOG("Internal error\n");
-   }
-   else {
+   if(Events > 0) {
       int LowTideEvent;
       int HighTideEvent;
-      if(TideEvents[i-1].LowTide) {
+      if(TideEvents[0].LowTide) {
       // Last Tide was a low tide
-         LowTideEvent = i - 1;
-         HighTideEvent = i;
+         LowTideEvent = 0;
+         HighTideEvent = 1;
       }
       else {
       // Last Tide was a high tide
-         HighTideEvent = i;
-         LowTideEvent = i - 1;
+         LowTideEvent = 1;
+         HighTideEvent = 0;
       }
       Config.LowTide = TideEvents[LowTideEvent].Time;
       Config.LowTideHeight = TideEvents[LowTideEvent].Height;

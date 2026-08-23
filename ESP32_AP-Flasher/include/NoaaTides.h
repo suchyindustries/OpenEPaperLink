@@ -14,7 +14,7 @@ typedef struct {
 // if MaxValues == 2 then return last high/low tide and next high/low tide,
 // otherwise return yesterday's high/low tide, today's high/low tides and
 // the first high/low tide tomorrow.
-int GetNoaaTides(String StationID,std::vector<HighLowArray_t> &Results);
+int GetNoaaTides(String StationID,std::vector<HighLowArray_t> &Tides,time_t Start);
 
 #endif   // _NOAA_TIDES_H
 
