@@ -1,4 +1,5 @@
 #include "web.h"
+#include "tlsr_flasher.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -558,12 +559,18 @@ void init_web() {
         String HasTSLR = "0";
 
         response->print("{");
+        /* These are capabilities of the board, not a single choice. A radio
+           co-processor is either an H2 or a C6, so those stay exclusive - but
+           an SWS wired TLSR is independent of that, and a board that has both
+           can flash either. Reporting them separately lets the web interface
+           offer whatever the hardware can actually reach. */
 #ifdef HAS_H2
         HasH2 = "1";
-#elif defined(HAS_TSLR)
-        HasTSLR = "1";
 #elif defined(C6_OTA_FLASHING)
         HasC6 = "1";
+#endif
+#if defined(FLASHER_AP_SWS) || defined(HAS_TSLR)
+        HasTSLR = "1";
 #endif
         response->print("\"C6\": \"" + HasC6 + "\", ");
         response->print("\"H2\": \"" + HasH2 + "\", ");
@@ -682,6 +689,28 @@ void init_web() {
         if (request->hasParam("env", true)) {
             config.env = request->getParam("env", true)->value();
         }
+        /* Pins used only while flashing a co-processor. Normal operation
+           keeps the compile time pinout, so a wrong value here can cost a
+           flash attempt but never the running access point. -1 means the
+           board has no such pin. */
+        {
+            struct { const char *name; int8_t *field; } flashPins[] = {
+                {"flashpin_sws", &config.flashPinSws},
+                {"flashpin_reset", &config.flashPinReset},
+                {"flashpin_txd", &config.flashPinTxd},
+                {"flashpin_rxd", &config.flashPinRxd},
+                {"flashpin_prog", &config.flashPinProg},
+                {"flashpin_dbgtxd", &config.flashPinDbgTxd},
+                {"flashpin_dbgrxd", &config.flashPinDbgRxd},
+            };
+            for (auto &p : flashPins) {
+                if (!request->hasParam(p.name, true)) continue;
+                long v = request->getParam(p.name, true)->value().toInt();
+                if (v < -1 || v > 48) continue;   /* outside any ESP32 GPIO */
+                *p.field = (int8_t)v;
+            }
+        }
+
         saveAPconfig();
         setAPchannel();
         request->send(200, "text/plain", "Ok, saved");
@@ -816,6 +845,7 @@ void init_web() {
             cleanupCurrent();
             contentFS->remove("/AP_FW_Pack.bin");
             contentFS->remove("/OpenEPaperLink_esp32_C6.bin");
+            contentFS->remove("/OpenEPaperLink_esp32_C6_Uart0.bin");
             contentFS->remove("/bootloader.bin");
             contentFS->remove("/partition-table.bin");
             contentFS->remove("/update_actions.json");
@@ -857,6 +887,22 @@ void init_web() {
     server.on("/check_file", HTTP_GET, handleCheckFile);
     server.on("/rollback", HTTP_POST, handleRollback);
     server.on("/update_c6", HTTP_POST, handleUpdateC6);
+#ifdef FLASHER_AP_SWS
+    /* Flash the TLSR over SWS. Defaults to the firmware already on the
+       filesystem; "url" fetches a release directory instead. */
+    server.on("/flash_tlsr", HTTP_POST, [](AsyncWebServerRequest *request) {
+        /* Zigbee is the default: that is what most tags in the field expect.
+           The GFSK build is the special case and carries the suffix. The two
+           are different radios, so each has its own file. */
+        String url = "", apType = "F8";
+        if (request->hasParam("url", true)) url = request->getParam("url", true)->value();
+        if (request->hasParam("aptype", true)) apType = request->getParam("aptype", true)->value();
+        String path = (apType == "F9") ? "/TLSR_AP_FW_GFSK.bin" : "/TLSR_AP_FW.bin";
+        if (request->hasParam("file", true)) path = request->getParam("file", true)->value();
+        tlsrFlashStart(path, url, apType);
+        request->send(200, "text/plain", "started");
+    });
+#endif
     server.on("/update_actions", HTTP_POST, handleUpdateActions);
     server.on("/update_ota", HTTP_POST, [](AsyncWebServerRequest *request) {
         handleUpdateOTA(request);

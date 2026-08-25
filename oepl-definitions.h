@@ -94,6 +94,8 @@
 #define RESERVED_TESTING 0xFE
 #define SOLUM_NODISPLAY 0xFF
 #define ESP32_C6 0xC6
+#define TLSR_ZIGBEE_AP 0xF8
+#define TLSR_GFSK_AP 0xF9
 
 #define BWRY_29 0xC0
 #define ACEP_40 0xC1

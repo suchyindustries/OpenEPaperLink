@@ -1185,3 +1185,32 @@ h4 {
 	}
 
 }
+
+details.advanced > summary {
+	display: inline-block;
+	padding: 5px 10px;
+	background-color: var(--color-button-bg);
+	color: var(--color-button-text);
+	cursor: pointer;
+	user-select: none;
+	font-weight: bold;
+	list-style: none;
+}
+details.advanced > summary::-webkit-details-marker { display: none; }
+details.advanced > summary::before { content: "\25B8  "; }
+details.advanced[open] > summary::before { content: "\25BE  "; }
+details.advanced > summary:hover { background-color: var(--color-button-hover-bg); }
+details.advanced {
+	max-width: 360px;
+}
+details.advanced label {
+	width: 185px;
+}
+details.advanced select {
+	max-width: 150px;
+}
+details.advanced[open] {
+	border: 1px solid var(--color-button-bg);
+	padding: 0 10px 10px 10px;
+}
+
