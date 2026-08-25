@@ -126,6 +126,27 @@ esp_loader_error_t flash_binary(String &file_path, size_t address) {
     return ESP_LOADER_SUCCESS;
 }
 
+/* Where a manifest entry is staged on the local filesystem.
+
+   LittleFS as configured here allows 32 characters per name - measured, not
+   assumed: 32 works, 33 fails to open. Upstream's
+   firmware_C6_Uart0.json still names OpenEPaperLink_esp32_C6_Uart0.bin, which
+   is exactly 33, so downloading it fails with "file open error" and no amount
+   of retrying helps. The plain C6 build is 27 and slips through, which is why
+   only the Uart0 variant is affected. Our copy is renamed to 32 characters,
+   but an access point pointed at the upstream repository still meets the long
+   name - which is what this is for.
+
+   The remote name stays untouched - the URL has to match the repository. Only
+   the local copy is shortened, and from the front: the tail carries the
+   variant and the extension, which is what has to stay distinguishable. */
+#define LFS_NAME_MAX_HERE 32
+
+static String stagingPath(const String &remote) {
+    if (remote.length() <= LFS_NAME_MAX_HERE) return "/" + remote;
+    return "/" + remote.substring(remote.length() - LFS_NAME_MAX_HERE);
+}
+
 bool downloadAndWriteBinary(String &filename, const char *url) {
     HTTPClient binaryHttp;
     bool Ret = false;
@@ -241,14 +262,16 @@ bool FlashC6_H2(const char *RepoUrl) {
 
         JsonArray jsonArray = jsonDoc.as<JsonArray>();
         for(JsonObject obj : jsonArray) {
-            String filename = "/" + obj["filename"].as<String>();
-            String binaryUrl = RepoUrl + filename;
+            String remote = obj["filename"].as<String>();
+            String remotePath = "/" + remote;          /* unveraendert fuer die URL */
+            String filename = stagingPath(remote);     /* ggf. gekuerzt, nur lokal */
+            String binaryUrl = RepoUrl + remotePath;
 
             /* The manifest carries a version per file and nothing used to look
                at it. Printing it is the only way to tell from the log which
                build actually went onto the chip. */
             String ver = obj["version"].as<String>();
-            wsSerial("  " + filename.substring(1) + (ver.length() ? " (version " + ver + ")" : ""));
+            wsSerial("  " + remote + (ver.length() ? " (version " + ver + ")" : ""));
 
             for(retry = 0; retry < 10; retry++) {
                 if(downloadAndWriteBinary(filename, binaryUrl.c_str())) {
@@ -312,7 +335,7 @@ bool FlashC6_H2(const char *RepoUrl) {
 
         JsonArray jsonArray = jsonDoc.as<JsonArray>();
         for(JsonObject obj : jsonArray) {
-            String filename = "/" + obj["filename"].as<String>();
+            String filename = stagingPath(obj["filename"].as<String>());
             const char *addressStr = obj["address"];
             uint32_t address = strtoul(addressStr, NULL, 16);
 

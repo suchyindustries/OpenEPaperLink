@@ -845,7 +845,7 @@ void init_web() {
             cleanupCurrent();
             contentFS->remove("/AP_FW_Pack.bin");
             contentFS->remove("/OpenEPaperLink_esp32_C6.bin");
-            contentFS->remove("/OpenEPaperLink_esp32_C6_Uart0.bin");
+            contentFS->remove("/OpenEPaperLink_esp32_C6uart0.bin");
             contentFS->remove("/bootloader.bin");
             contentFS->remove("/partition-table.bin");
             contentFS->remove("/update_actions.json");
