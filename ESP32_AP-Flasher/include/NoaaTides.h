@@ -1,9 +1,9 @@
 #ifndef _NOAA_TIDES_H
 #define _NOAA_TIDES_H
 
+#include "bezier.h"
 
 typedef struct {
-   int  MinsAfterMidnight;
    time_t Time; // absolute time
    int  Hrs;
    int  Mins;
@@ -11,10 +11,15 @@ typedef struct {
    bool  LowTide;
 } HighLowArray_t;
 
-// if MaxValues == 2 then return last high/low tide and next high/low tide,
-// otherwise return yesterday's high/low tide, today's high/low tides and
-// the first high/low tide tomorrow.
-int GetNoaaTides(String StationID,std::vector<HighLowArray_t> &Tides,time_t Start);
+class NoaaTides {
+public:
+   int GetNoaaTides(String StationID,time_t Start);
+   int PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration = 24*60*60);
+   std::vector<HighLowArray_t> Tides;
+private:
+   void InitSegment(time_t,int,bezier::Bezier<3> &,double &);
+};
+
 
 #endif   // _NOAA_TIDES_H
 

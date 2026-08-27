@@ -23,6 +23,9 @@
 #define LOG_RAW(format, ...)
 #endif
 
+bool HttpQuery(String &url,String &Response);
+int AddNoaaTides(class NoaaTides *,time_t &,OwmConfig &,String &);
+
 LocaleStrings_t Strings;
 typedef struct {
    const char *Name;
@@ -108,15 +111,16 @@ const LookupTbl_t LookupTbl[] = {
    {NULL}
 };
 
-bool HttpQuery(String &url,String &Response);
-int AddNoaaTides(OwmConfig &Config,String &StationID);
-
 bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, imgParam &imageParams)
 {
    bool Ret = false; // Assume the worse
    JsonDocument doc;
+   time_t Now = time(NULL);
    JsonObject languageObject;
    OwmConfig Config;
+   class DrawOWM *owm = NULL;
+   class NoaaTides *pNoaaTides = NULL;
+
    char *TzSave = getenv("TZ");
    String IANA_tz = cfgobj["#tz"];
    IANA_tz.replace('_',' ');
@@ -142,6 +146,7 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
          LOG("%d x %d display not supported\n",imageParams.width,imageParams.height);
          break;
       }
+      owm = new DrawOWM(spr,Config);
 
       getLocation(cfgobj);
       String City = cfgobj["location"];
@@ -215,9 +220,10 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       }
 
       if(cfgobj["StationID"]) {
+         pNoaaTides = new NoaaTides();
          String StationID = cfgobj["StationID"].as<String>();
          LOG("Calling AddNoaaTides for Station %s\n",StationID.c_str());
-         if(AddNoaaTides(Config,StationID)) {
+         if(AddNoaaTides(pNoaaTides,Now,Config,StationID)) {
          // Got tide values
             if(Config.DisplayFormat == FORMAT_640X384) {
             // Replace AirQuality && Uvi with tides
@@ -233,6 +239,10 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
                Config.PosLastTide = 8;
                Config.PosNextTide = 9;
             }
+         }
+         else {
+            delete pNoaaTides;
+            pNoaaTides == NULL;
          }
       }
 
@@ -255,8 +265,7 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       if(Config.PosAirQuality != -1) {
       // set start and end to appropriate values so that the last 24 hours 
       // of air pollution history is returned. Unix, UTC.
-         time_t now;
-         int64_t end = time(&now);
+         int64_t end = time(NULL);
       // minus 1 is important here, otherwise we could get an extra hour of history
          int64_t start = end - ((3600 * 24) - 1);
          char endStr[22];
@@ -280,7 +289,6 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
          Config.AirPollutionApiResponse = NULL;
       }
 
-      class DrawOWM *owm = new DrawOWM(spr,Config);
       if(config.language) {
       // Language != englisey, Set locale
          Config.bDisplayAlerts = false;   // Alerts are only available in English
@@ -324,9 +332,16 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       else {
          Config.bDisplayAlerts = true;
       }
-
       owm->DrawIt();
-      delete owm;
+      if(pNoaaTides != NULL) {
+         pNoaaTides->PlotNoaaTides(owm,Now);
+      }
+      if(owm != NULL) {
+         delete owm;
+      }
+      if(pNoaaTides != NULL) {
+         delete pNoaaTides;
+      }
       Ret = true;
    } while(false);
    setenv("TZ",TzSave,1);
@@ -366,20 +381,17 @@ bool HttpQuery(String &url,String &Response)
 
 //   String StationID = "8446613"; // Wellfleet
 //   String StationID = "9415009"; // San Pedro
-int AddNoaaTides(OwmConfig &Config,String &StationID)
+int AddNoaaTides(class NoaaTides *pNoaaTides,time_t &Now,OwmConfig &Config,String &StationID)
 {
-   time_t Now;
-   std::vector<HighLowArray_t> TideEvents;
    int Ret = 0;
 
    LOG("StationID %s\n",StationID.c_str());
-   time(&Now);
-   int Events = GetNoaaTides(StationID,TideEvents,Now);
+   int Events = pNoaaTides->GetNoaaTides(StationID,Now);
    LOG("Got %d events\n",Events);
    if(Events > 0) {
       int LowTideEvent;
       int HighTideEvent;
-      if(TideEvents[0].LowTide) {
+      if(pNoaaTides->Tides[0].LowTide) {
       // Last Tide was a low tide
          LowTideEvent = 0;
          HighTideEvent = 1;
@@ -389,16 +401,17 @@ int AddNoaaTides(OwmConfig &Config,String &StationID)
          LowTideEvent = 1;
          HighTideEvent = 0;
       }
-      Config.LowTide = TideEvents[LowTideEvent].Time;
-      Config.LowTideHeight = TideEvents[LowTideEvent].Height;
-      Config.HighTide = TideEvents[HighTideEvent].Time;
-      Config.HighTideHeight = TideEvents[HighTideEvent].Height;
+      Config.LowTide = pNoaaTides->Tides[LowTideEvent].Time;
+      Config.LowTideHeight = pNoaaTides->Tides[LowTideEvent].Height;
+      Config.HighTide = pNoaaTides->Tides[HighTideEvent].Time;
+      Config.HighTideHeight = pNoaaTides->Tides[HighTideEvent].Height;
       Ret = Events;
    }
 
    LOG("Returning %d\n",Ret);
    return Ret;
 }
+
 #endif // WITHOUT_OWM
 
 
