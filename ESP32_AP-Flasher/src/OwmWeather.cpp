@@ -23,6 +23,7 @@
 #define LOG_RAW(format, ...)
 #endif
 
+
 bool HttpQuery(String &url,String &Response);
 int AddNoaaTides(class NoaaTides *,time_t &,OwmConfig &,String &);
 
@@ -66,8 +67,8 @@ const LookupTbl_t LookupTbl[] = {
    {"TXT_INDOOR_HUMIDITY",&Strings.TXT_INDOOR_HUMIDITY},
    {"TXT_DEWPOINT",&Strings.TXT_DEWPOINT},
    {"TXT_MOONPHASE",&Strings.TXT_MOONPHASE},
-   {"TXT_LAST_TIDE",&Strings.TXT_LAST_TIDE},
-   {"TXT_NEXT_TIDE",&Strings.TXT_NEXT_TIDE},
+   {"TXT_LOWTIDE",&Strings.TXT_LOWTIDE},
+   {"TXT_HIGHTIDE",&Strings.TXT_HIGHTIDE},
    {"TXT_NEW_MOON",&Strings.TXT_NEW_MOON},
    {"TXT_WAXING_CRESCENT",&Strings.TXT_WAXING_CRESCENT},
    {"TXT_FIRST_QUARTER",&Strings.TXT_FIRST_QUARTER},
@@ -152,6 +153,17 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       String City = cfgobj["location"];
       Config.City = City.c_str();
       Config.bMetric = cfgobj["units"] == "0";
+      if(imageParams.hwdata.colortable.size() > 3) {
+      // make the bold assumption of a BWRY display
+         Config.RainGraphColor = TFT_YELLOW;
+         Config.RainGraphSolid = true;
+      }
+      else {
+         Config.RainGraphColor = TFT_BLACK;
+         Config.RainGraphSolid = false;
+      }
+      LOG("Assuming BWR%s display\n",
+          Config.RainGraphColor == TFT_YELLOW ? "Y" : "");
 
       if(Config.bMetric) {
          Config.WindSpeed = UNITS_SPEED_KILOMETERSPERHOUR;
@@ -191,8 +203,8 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       Config.PosMoonrise     = -1;
       Config.PosMoonset      = -1;
       Config.PosMoonphase    = -1;
-      Config.PosLastTide     = -1;
-      Config.PosNextTide     = -1;
+      Config.PosTide1        = -1;
+      Config.PosTide2        = -1;
 
       switch(Config.DisplayFormat) {
          case FORMAT_800X480:
@@ -226,18 +238,18 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
          if(AddNoaaTides(pNoaaTides,Now,Config,StationID)) {
          // Got tide values
             if(Config.DisplayFormat == FORMAT_640X384) {
-            // Replace AirQuality && Uvi with tides
-               Config.PosDewpoint = -1;
-               Config.PosUvi      = -1;
-               Config.PosLastTide = 4;
-               Config.PosNextTide = 5;
+            // Replace AirQuality & Uvi with tides
+               Config.PosAirQuality = -1;
+               Config.PosUvi        = -1;
+               Config.PosTide1      = 4;
+               Config.PosTide2      = 5;
             }
             else {
             // Replace Pressure & Dewpoint  with tides
                Config.PosDewpoint = -1;
                Config.PosPressure = -1;
-               Config.PosLastTide = 8;
-               Config.PosNextTide = 9;
+               Config.PosTide1    = 8;
+               Config.PosTide2    = 9;
             }
          }
          else {
@@ -391,15 +403,15 @@ int AddNoaaTides(class NoaaTides *pNoaaTides,time_t &Now,OwmConfig &Config,Strin
    if(Events > 0) {
       int LowTideEvent;
       int HighTideEvent;
-      if(pNoaaTides->Tides[0].LowTide) {
-      // Last Tide was a low tide
-         LowTideEvent = 0;
-         HighTideEvent = 1;
+      if(pNoaaTides->Tides[1].LowTide) {
+      // Next Tide is a low tide
+         LowTideEvent = 1;
+         HighTideEvent = 2;
       }
       else {
-      // Last Tide was a high tide
-         LowTideEvent = 1;
-         HighTideEvent = 0;
+      // Next Tide is a high tide
+         LowTideEvent = 2;
+         HighTideEvent = 1;
       }
       Config.LowTide = pNoaaTides->Tides[LowTideEvent].Time;
       Config.LowTideHeight = pNoaaTides->Tides[LowTideEvent].Height;

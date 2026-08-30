@@ -22,6 +22,37 @@
 #define LOG_RAW(format, ...)
 #endif
 
+#define VERBOSE_LOGGING 0
+#if ENABLE_LOGGING && VERBOSE_LOGGING
+#define VLOG(format, ...) _LOG(format,## __VA_ARGS__))
+#else
+#define VLOG(format, ...)
+#endif
+
+// #define DEBUG_STARTTIME "8/30/26 08:22:01"
+#ifdef DEBUG_STARTTIME
+void SetDebugStartTime(time_t *pStartTime)
+{
+   struct tm Timeinfo;
+   const char *DeBugTime = DEBUG_STARTTIME;
+   strptime(DeBugTime,"%m/%d/%y %H:%M:%S",&Timeinfo);
+   Timeinfo.tm_isdst = 1;
+   *pStartTime = mktime(&Timeinfo);
+   LOG("Start time %d %s",*pStartTime,ctime(pStartTime));
+}
+#else
+#define SetDebugStartTime(x)
+#endif
+
+
+static time_t Time2StartOfHour(time_t Time)
+{
+   struct tm Timeinfo;
+
+   localtime_r(&Time,&Timeinfo);
+   Timeinfo.tm_min = 0;
+   return mktime(&Timeinfo);
+}
 
 //   String StationID = "8446613"; // Wellfleet
 //   String StationID = "9415009"; // San Pedro
@@ -29,7 +60,7 @@
 // Return tide predications for 24 hours starting at the specified time including
 // one tide event from before the start time and once after the 24 hour 
 // period.
-int NoaaTides::GetNoaaTides(String StationID,time_t Start)
+int NoaaTides::GetNoaaTides(String StationID,time_t Start,time_t Duration)
 {
    time_t Time;
    time_t EndTime;
@@ -53,14 +84,19 @@ int NoaaTides::GetNoaaTides(String StationID,time_t Start)
    HighLowArray_t Values;
    HighLowArray_t FirstTideValues;
 
+   SetDebugStartTime(&Start);
+// The graph starts on the hour, round Start down to the start of the hour
+   Start = Time2StartOfHour(Start);
+
    Time = Start;
-   EndTime = Time + 24*60*60;
    LOG("Start time %s",ctime(&Time));
    localtime_r(&Time,&Timeinfo);
    Day = Timeinfo.tm_mday;
    LOG("Set Today to %d\n",Day);
 
-// Begin predictions 24 hours ago, ending after 24 hours
+// Begin predictions 24 hours ago, ending after 48 hours
+// This ensures we get at leaset one event before the time window and one after
+   EndTime = Time + 2*(24*60*60);
    Time -= 24*60*60;
    localtime_r(&Time,&Timeinfo);
    snprintf(BeginDate,sizeof(BeginDate),"%d%02d%02d",
@@ -89,6 +125,7 @@ int NoaaTides::GetNoaaTides(String StationID,time_t Start)
       return true;
    }
 
+   EndTime = Start + Duration;
    JsonArray Predictions = doc["predictions"];
    for(JsonObject Prediction : Predictions) {
       DateTime = Prediction["t"].as<String>();
@@ -113,8 +150,6 @@ int NoaaTides::GetNoaaTides(String StationID,time_t Start)
       LOG("Day %d Hrs %d Mins %d\n",Day,Hrs,Mins);
 
       Values.Height = Height;
-      Values.Hrs = Hrs;
-      Values.Mins = Mins;
       Values.Time = TideTime;
 
       if(TideType == "H") {
@@ -133,7 +168,7 @@ int NoaaTides::GetNoaaTides(String StationID,time_t Start)
          FirstTideValues = Values;
       }
       else if(TideTime > EndTime) {
-      // We're doen
+      // We're done
          Tides.push_back(Values);
          Entries++;
          break;
@@ -150,19 +185,22 @@ int NoaaTides::GetNoaaTides(String StationID,time_t Start)
       }
    }
 
-   LOG("Returning %d (%d) entries\n",Entries,Tides.size());
+   LOG("Returning %d entries\n",Tides.size());
 
    for(i = 0; i < Tides.size(); i++) {
-      LOG("%d: %f foot %s tide @ %s",
+      LOG("%d: %f foot %s tide @ %d %s",
           i,
           Tides[i].Height,
           Tides[i].LowTide ? "low" : "high",
+          Tides[i].Time,
           ctime(&Tides[i].Time));
    }
 
    return Entries;
 }
 
+// #define TIDE_PLOT_COLOR TFT_YELLOW
+#define TIDE_PLOT_COLOR TFT_BLACK
 int NoaaTides::PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration)
 {
    float Height;
@@ -170,14 +208,16 @@ int NoaaTides::PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration)
    float MaxHeight = -1000.0;
    int x0,x1,y0,y1;
    int i;
+   struct tm Timeinfo;
    int Entries = Tides.size();
 
-   LOG("Start %d Duration %d Entries %d\n",Start,Duration,Entries);
+   SetDebugStartTime(&Start);
 
+// The graph starts on the hour, round Start down to the start of the hour
+   Start = Time2StartOfHour(Start);
+
+   LOG("Start %d Duration %d Entries %d\n",Start,Duration,Entries);
    owm->GetBB(BB_GRAPH_DATA,x0,x1,y0,y1);
-#if 0
-   owm->display.drawLine(x0,y0,x1,y1,TFT_YELLOW);
-#else
 
 // Update Min/Max height for midnight
    std::vector<bezier::Vec2> BezierPoints;
@@ -186,9 +226,9 @@ int NoaaTides::PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration)
    double MidwayTime;
    double SegmentTime;
 
-   for(i = 0; i < Entries - 1; i++) {
+   for(i = 1; i < Entries; i++) {
       InitSegment(Start,i,cubicBezier,SegmentTime);
-      ThisPoint = cubicBezier.valueAt(SegmentTime);
+      ThisPoint = cubicBezier.valueAt(0.0);
       double Height = ThisPoint.y;
 
       if(MinHeight > Height) {
@@ -204,13 +244,23 @@ int NoaaTides::PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration)
    LOG("MinHeight %f\n",MinHeight);
    LOG("MaxHeight %f\n",MaxHeight);
 
-#if 1
    uint16_t GraphLeft = x0;
    uint16_t GraphTop = y0;
    uint16_t GraphBottom = y1;
 	uint16_t GraphWidth = x1 - x0;
    uint16_t DrawX = x0; // right
    uint16_t DrawY = y1; // bottom
+
+   LOG("Graph %d x %d @ %d,%d\n",GraphWidth,y1-GraphTop,x0,y0);
+   LOG("GraphTop %d GraphBottom %d\n",GraphTop,GraphBottom);
+
+// Leave room for tide max/min height labels
+   owm->setFreeFont(owm->LabelFont);
+   String TideHeight = String(MaxHeight,1);
+   uint16_t ValueHeight = owm->getStringHeight(TideHeight);
+   GraphBottom -= ValueHeight + 4;
+   GraphTop += ValueHeight + 4;
+   LOG("ValueHeight %d GraphTop %d GraphBottom %d\n",ValueHeight,GraphTop,GraphBottom);
 
 	bool bFirst = true;
 	uint16_t LastY = 0;
@@ -229,273 +279,76 @@ int NoaaTides::PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration)
 			else {
 			// move to next segment
 				i++;
-				LOG("%d > %d i %d\n",Time,Tides[i+1].Time,i);
+            if(i > Entries - 2) {
+               ELOG("Invalid index %d\n",i);
+               return 1;
+            }
+				LOG("segment %d %d > %d\n",i,Time,Tides[i].Time);
 				BezierPoints.clear();
 			}
          InitSegment(Start,i,cubicBezier,SegmentTime);
+         if(i > 0) {
+            int x = GraphLeft + GraphWidth * (Tides[i].Time - Start) / Duration;
+            Height = Tides[i].Height;
+            DrawY = GraphBottom;
+            DrawY -= ((Height - MinHeight) / (MaxHeight - MinHeight)) *
+                    (GraphBottom - GraphTop);
+            if(Tides[i].LowTide) {
+            // Display low tide height below graph
+               DrawY += ValueHeight;
+            }
+            else {
+            // Display high tide height above graph
+               DrawY -= 4;
+            }
+         // label 
+            TideHeight = String(Height,2) + " ft";
+            uint16_t HeighWidth = owm->getStringWidth(TideHeight);
+            uint16_t xTideHeight = x - (HeighWidth / 2);
+            if(xTideHeight - (HeighWidth / 2) < GraphLeft) {
+               LOG("Height label moved right to fit\n");
+               xTideHeight = GraphLeft;
+            }
+            else if(x + (HeighWidth / 2) >= GraphLeft + GraphWidth) {
+               LOG("Height label moved left to fit\n");
+               xTideHeight = GraphWidth - HeighWidth;
+            }
+
+            LOG("Draw %s Height @ %d,%d sidth %d\n",
+                TideHeight.c_str(),xTideHeight,DrawY,HeighWidth);
+            owm->drawString(xTideHeight,DrawY,TideHeight,LEFT,TIDE_PLOT_COLOR);
+         }
 		}
 
 		SegmentTime = Time - Tides[i].Time;
       SegmentTime /= Tides[i+1].Time - Tides[i].Time; 
-		LOG("t %f Time %d SegmentTime %f i %d %d %d\n",
+		VLOG("t %f Time %d SegmentTime %f i %d %d\n",
           t,Time,SegmentTime,i,Tides[i+i].Time,Tides[i].Time);
 
 		if(SegmentTime < 0.0 || SegmentTime > 1.0) {
-			LOG("Invalid SegmentTime\n");
+			ELOG("Invalid SegmentTime\n");
 			return 1;
 		}
       ThisPoint = cubicBezier.valueAt(SegmentTime);
-		LOG("%d t %f (%f) = %f\n",DrawX,t,SegmentTime,ThisPoint.y);
+		VLOG("%d t %f (%f) = %f\n",DrawX,t,SegmentTime,ThisPoint.y);
       Height = ThisPoint.y;
-      DrawY = ((Height - MinHeight) / (MaxHeight - MinHeight)) *
-               (GraphBottom - GraphTop);
-
-		LOG("DrawY %d\n",DrawY);
-      DrawY = GraphBottom - DrawY;
-		LOG("DrawY %d\n",DrawY);
-#if 0
-      DrawY += CharHeight / 2;
-		LOG("DrawY %d\n",DrawY);
-#endif
+      DrawY = GraphBottom;
+      DrawY -= ((Height - MinHeight) / (MaxHeight - MinHeight)) *
+              (GraphBottom - GraphTop);
+		VLOG("DrawY %d\n",DrawY);
 		if(LastY != 0) {
-			owm->display.drawLine(DrawX,LastY,DrawX + 1,DrawY,TFT_YELLOW);
+			owm->drawLine(DrawX,LastY,DrawX + 1,DrawY,TIDE_PLOT_COLOR);
 			DrawX++;
 		}
 		LastY = DrawY;
    }
-#endif 
-#if 0
-// Round MinHeight and MaxHeight to nearest .5 foot
-
-// 1.5 initial line spacing from title
-   DrawY += CharHeight + (CharHeight / 2);
-   CharHeight = GRAPH_LABEL_SIZE;
-
-   drawString(spr,LowTidesS,DrawX,DrawY,
-              GRAPH_LABEL_FONT,TL_DATUM,TFT_BLACK,GRAPH_LABEL_SIZE);
-   drawString(spr,HighTidesS,spr.width()-10,DrawY,
-              GRAPH_LABEL_FONT,TR_DATUM,TFT_BLACK);
-
-
-   DrawY += CharHeight * 2;
-
-   uint16_t GraphTop = DrawY;
-// Leave room for X axis labels below the graph
-   uint16_t GraphBottom = imageParams.height - 1 - (CharHeight *2) - BOTTOM_MARGIN;
-   uint16_t GraphRight = imageParams.width - 1 - RIGHT_MARGIN;
-
-   LOG("Min, max Height %f, %f -> ",MinHeight,MaxHeight);
-	if(MinHeight < 0.0) {
-		MinHeight = round(MinHeight * 2.0) / 2.0;
-	}
-	else {
-		MinHeight = floor(MinHeight * 2.0) / 2.0;
-	}
-   MaxHeight = round(MaxHeight * 2.0) / 2.0;
-   LOG("%f, %f\n",MinHeight,MaxHeight);
-
-// Draw Min height and max height lines plus NUM_HEIGHT_LINES - 2 
-
-   float HeightIncrement = (MaxHeight - MinHeight) / NUM_HEIGHT_LINES;
-// force labels to be on 1/2 foot boundaries
-   LOG("HeightIncrement %f -> ",HeightIncrement);
-   HeightIncrement = round((HeightIncrement + 0.499) * 2.0) / 2.0;
-   LOG("%f\n",HeightIncrement);
-	float Margin = (MinHeight + (HeightIncrement * NUM_HEIGHT_LINES)) - 
-					   (MaxHeight - MinHeight);
-
-// Adjust MinHeight / MaxHeight
-   LOG("MinHeight/MaxHeight %f %f -> ",MinHeight,MaxHeight);
-   MaxHeight = MaxHeight + round(Margin / 2.0);
-	MinHeight =  MaxHeight - (HeightIncrement * NUM_HEIGHT_LINES);
-   LOG("%f %f\n",MinHeight,MaxHeight);
-
-// Draw tide height at left first
-
-   int MaxWidth = 0;
-   int IncrementY = (GraphBottom - GraphTop) / NUM_HEIGHT_LINES;
-
-   for(int i = 0; i < NUM_HEIGHT_LINES + 1; i++) {
-      Height = MinHeight + (i * HeightIncrement);
-      DrawY = ((Height - MinHeight) / (MaxHeight - MinHeight)) *
-               (GraphBottom - GraphTop);
-      DrawY = GraphBottom - DrawY;
-      String HeightS(Height);
-      HeightS += " ft ";
-      LOG("Drawing %2.1f @ %d %d %d\n",Height,DrawX,DrawY,i);
-      StringWidth = drawString(spr,HeightS,DrawX,DrawY,
-                               GRAPH_LABEL_FONT,TL_DATUM,TFT_BLACK,
-                               GRAPH_LABEL_SIZE);
-      if(MaxWidth < StringWidth) {
-         MaxWidth = StringWidth;
-      }
-   }
-   DrawX += MaxWidth;
-   uint16_t GraphLeft = DrawX;
-	uint16_t GraphWidth = GraphRight - GraphLeft;
-
-   LOG("MaxWidth %d DrawX %d DrawY %d\n",MaxWidth,DrawX,DrawY);
-
-// adjust GraphRight and GraphWidth to make room for "12am" 
-// centered under right side
-	StringWidth = drawString(spr,"12am",0,
-									 GraphBottom + CharHeight + (CharHeight / 2),
-									 GRAPH_LABEL_FONT,TL_DATUM,TFT_BLACK,
-									 GRAPH_LABEL_SIZE);
-	GraphRight -= StringWidth / 2;
-	GraphWidth -= StringWidth / 2;
-
-// Adjust GraphTop and GraphBottom to plot area
-   GraphTop += (CharHeight / 2);
-   GraphBottom += (CharHeight / 2);
-
-// Draw tide height values
-   LOG("Grid lines @ ");
-   Height = MinHeight;
-   for(int i = 0; i < NUM_HEIGHT_LINES + 1; i++) {
-      DrawY = ((Height - MinHeight) / (MaxHeight - MinHeight)) *
-               (GraphBottom - GraphTop);
-      DrawY = GraphBottom - DrawY;
-      LOG("%2.1f DrawY %d",Height,DrawY);
-		if(i == 0 || i == NUM_HEIGHT_LINES) {
-		// Solid top and bottom lines
-			spr.drawLine(DrawX,DrawY,GraphRight,DrawY,TFT_BLACK);
-		}
-		else {
-		// otherwise dotted line
-			for(uint16_t x = DrawX; x < GraphRight; x += 2) {
-				spr.drawPixel(x,DrawY,TFT_BLACK);
-			}
-		}
-      Height += HeightIncrement;
-   }
-   LOG("\n");
-
-   spr.drawLine(GraphLeft,GraphTop,GraphLeft,GraphBottom,TFT_BLACK);
-   spr.drawLine(GraphRight,GraphTop,GraphRight,GraphBottom,TFT_BLACK);
-
-// Draw time at bottom 4 hour increments from midnight to midnight
-// |12am 4am   8am  noon   4pm   8pm  12am|
-	DrawX = GraphLeft;
-	DrawY = GraphBottom + CharHeight;
-
-	MaxWidth = 0;
-   for(int i = 0; i <= 24;  i += TIME_LINE_INCREMENT) {
-		String TimeS(i);
-		
-		if(i == 0 || i == 24) {
-			TimeS = "12am";
-		}
-		else if(i < 12) {
-			TimeS += "am";
-		}
-		else if(i > 12) {
-			TimeS = i - 12;
-			TimeS += "pm";
-		}
-		else {
-			TimeS = "noon";
-		}
-	// draw it at x=0 to get width
-		StringWidth = drawString(spr,TimeS,0,DrawY,GRAPH_LABEL_FONT,
-										 TL_DATUM,TFT_BLACK,GRAPH_LABEL_SIZE);
-      if(MaxWidth < StringWidth) {
-         MaxWidth = StringWidth;
-      }
-
-	// draw centered under time line
-		DrawX = GraphLeft + ((i * GraphWidth) / 24);
-		for(uint16_t y = GraphTop; y < GraphBottom; y+= 2) {
-			spr.drawPixel(DrawX,y,TFT_BLACK);
-
-		}
-		DrawX -= StringWidth / 2;
-		drawString(spr,TimeS,DrawX,DrawY,GRAPH_LABEL_FONT,
-					  TL_DATUM,TFT_BLACK,GRAPH_LABEL_SIZE);
-   }
-// stuff we wrote to measure the label widths
-	spr.fillRect(0,DrawY,MaxWidth,CharHeight,TFT_WHITE);
-
-   DrawX = GraphLeft;
-	i = 0;
-	bool bFirst = true;
-	uint16_t LastY = 0;
-   for(int j = 0; j < GraphWidth; j++) {
-   // Start at the last high/low tide
-		double t = (double) j / GraphWidth;
-		int Time = (24*60) * t;
-
-		if(bFirst || Time >= Tides[i+1].Time) {
-			LOG("bFirst %d Time %d Tides[%d].Time %d\n",
-				 bFirst,Time,i+1,Tides[i+1].Time);
-			if(bFirst) {
-				bFirst = false;
-			}
-			else {
-			// move to next segment
-				LOG("%f > %d i %d\n",t,Tides[i+1].Time,i);
-				i++;
-				BezierPoints.clear();
-			}
-			MidwayTime = (double) (Tides[i+1].Time - Tides[i].Time) / 2;
-			BezierPoints.push_back({(double)Tides[i].Time,
-									 (double) Tides[i].Height});
-			BezierPoints.push_back({MidwayTime,(double) Tides[i].Height});
-			BezierPoints.push_back({(double) Tides[i+1].Time,
-									 (double) Tides[i+1].Height});
-			BezierPoints.push_back({MidwayTime,(double) Tides[i+1].Height});
-			if(BezierPoints.size() != 4) {
-				LOG("BezierPoints %d i %d\n",BezierPoints.size(),i);
-				return;
-			}
-			cubicBezier = bezier::Bezier<3>(BezierPoints);
-		}
-
-		double SegmentTime;
-		LOG("i %d\n",i);
-		SegmentTime = Time - Tides[i].Time;
-		LOG("SegmentTime %f i %d %d %d\n",SegmentTime,i,
-			 Tides[i+i].Time,Tides[i].Time);
-
-		int SegmentDelta = Tides[i+1].Time - Tides[i].Time;
-		LOG("SegmentDelta %d\n",SegmentDelta);
-		SegmentTime /= SegmentDelta;
-		LOG("SegmentTime %f\n",SegmentTime);
-
-		if(SegmentTime < 0.0 || SegmentTime > 1.0) {
-			LOG("Invalid SegmentTime %f t %f Tides[%d].Time %d\n",
-				 SegmentTime,t,i,Tides[i].Time);
-			LOG("%d %f\n",Tides[i+1],
-				 (double)(Tides[i+i].Time - Tides[i].Time));
-			for(int k = 0; k < Entries; k++) {
-				LOG("Tides[%d].Time %d\n",k,Tides[k].Time);
-			}
-			return;
-		}
-      ThisPoint = cubicBezier.valueAt(SegmentTime);
-		LOG("%d t %f (%f) = %f\n",DrawX,t,SegmentTime,ThisPoint.y);
-      Height = ThisPoint.y;
-      DrawY = ((Height - MinHeight) / (MaxHeight - MinHeight)) *
-               (GraphBottom - GraphTop);
-		LOG("DrawY %d\n",DrawY);
-      DrawY = GraphBottom - DrawY;
-		LOG("DrawY %d\n",DrawY);
-      DrawY += CharHeight / 2;
-		LOG("DrawY %d\n",DrawY);
-		if(LastY != 0) {
-			spr.drawLine(DrawX,LastY,DrawX + 1,DrawY,TFT_BLACK);
-			DrawX++;
-		}
-		LastY = DrawY;
-   }
-#endif
-#endif
    return 0;
 }
 
 void NoaaTides::InitSegment(
    time_t Start,
-   int Segment,bezier::Bezier<3> &cubicBezier,
+   int Segment,
+   bezier::Bezier<3> &cubicBezier,
    double &SegmentTime)
 {
    std::vector<bezier::Vec2> BezierPoints;
@@ -518,8 +371,10 @@ void NoaaTides::InitSegment(
    }
 
    if(SegmentTime < 0.0 || SegmentTime > 1.0) {
-      ELOG("Invalid SegmentTime %f\n",SegmentTime);
+      ELOG("Invalid SegmentTime %f for segment %d\n",SegmentTime,Segment);
    }
 }
+
 #endif // WITHOUT_NOAA_TIDES
+
 
