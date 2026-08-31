@@ -225,7 +225,7 @@ bool downloadAndWriteBinary(String &filename, const char *url) {
 }
 
 bool FlashC6_H2(const char *RepoUrl) {
-    String JsonFilename = "/firmware_" SHORT_CHIP_NAME ".json" ;
+    String JsonFilename = "/firmware_" OTA_FW_JSON ".json" ;
     bool Ret = false;
     bool bLoaderInit = false;
     bool bDownload = strlen(RepoUrl) > 0;
@@ -293,13 +293,20 @@ bool FlashC6_H2(const char *RepoUrl) {
 
     if(Ret == true) do {
        Ret = false;
+        /* Read the pins out first. The local below is called "config" as
+           well and would shadow the global one inside its own initialiser -
+           which compiles to nonsense rather than an error in some contexts. */
+        const int8_t pinRx = ::config.flashPinDbgTxd;
+        const int8_t pinTx = ::config.flashPinDbgRxd;
+        const int8_t pinRst = ::config.flashPinReset;
+        const int8_t pinProg = ::config.flashPinProg;
         const loader_esp32_config_t config = {
             .baud_rate = 115200,
             .uart_port = FLASHER_DEBUG_PORT,
-            .uart_rx_pin = FLASHER_DEBUG_TXD,
-            .uart_tx_pin = FLASHER_DEBUG_RXD,
-            .reset_trigger_pin = FLASHER_AP_RESET,
-            .gpio0_trigger_pin = FLASHER_DEBUG_PROG,
+            .uart_rx_pin = (gpio_num_t)pinRx,
+            .uart_tx_pin = (gpio_num_t)pinTx,
+            .reset_trigger_pin = (gpio_num_t)pinRst,
+            .gpio0_trigger_pin = (gpio_num_t)pinProg,
         };
 
         bLoaderInit = true;
@@ -313,10 +320,15 @@ bool FlashC6_H2(const char *RepoUrl) {
             break;
         }
 
+#ifdef ESP_CHIP_TYPE
         if(esp_loader_get_target() != ESP_CHIP_TYPE) {
             wsSerial("Connected to wrong ESP32 type");
             break;
         }
+#else
+        /* Boards whose radio co-processor is not an ESP (a TLSR825x, written
+           over SWS) define no chip type - there is nothing to compare. */
+#endif
         wsSerial("Connected to ESP32-" SHORT_CHIP_NAME);
         int maxRetries = 5;
         esp_loader_error_t err;

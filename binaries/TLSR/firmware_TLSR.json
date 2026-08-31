@@ -1,0 +1,14 @@
+[{
+	"filename": "OEPL_TLSR_GFSK_AP.bin",
+	"address": "0x0",
+	"version": "0002",
+	"aptype": "F9",
+	"name": "TLSR825x AP, GFSK"
+},
+{
+	"filename": "OEPL_TLSR_AP.bin",
+	"address": "0x0",
+	"version": "0001",
+	"aptype": "F8",
+	"name": "TLSR825x AP, 802.15.4/Zigbee"
+}]

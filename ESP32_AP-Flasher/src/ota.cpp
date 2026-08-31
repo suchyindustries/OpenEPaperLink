@@ -46,17 +46,41 @@ void handleSysinfoRequest(AsyncWebServerRequest* request) {
     doc["flashsize"] = ESP.getFlashChipSize();
     doc["rollback"] = Update.canRollBack();
     doc["ap_version"] = apInfo.version;
+    doc["ap_type"] = apInfo.type;
+    doc["ap_typename"] = apTypeName(apInfo.type);
+#ifdef FLASHER_AP_SWS
+    doc["has_sws_flasher"] = 1;
+#else
+    doc["has_sws_flasher"] = 0;
+#endif
+    {
+        JsonObject fp = doc["flashpin_defaults"].to<JsonObject>();
+        fp["sws"] = (int)FLASH_DEF_SWS;
+        fp["reset"] = (int)FLASH_DEF_RESET;
+        fp["txd"] = (int)FLASH_DEF_TXD;
+        fp["rxd"] = (int)FLASH_DEF_RXD;
+        fp["prog"] = (int)FLASH_DEF_PROG;
+        fp["dbgtxd"] = (int)FLASH_DEF_DBGTXD;
+        fp["dbgrxd"] = (int)FLASH_DEF_DBGRXD;
+    }
 
     doc["hasC6"] = 0;
     doc["hasH2"] = 0;
     doc["hasTslr"] = 0;
 
+    /* Independent capabilities, not one exclusive choice. A radio co-processor
+       is either an H2 or a C6, so those two stay mutually exclusive - but an
+       SWS wired TLSR is a separate thing, and a board can carry either module.
+       While this was an #elif chain, declaring HAS_TSLR on a board that also
+       has a C6 silently reported hasC6 = 0. /get_ap_config already reports
+       them separately; this is the same fix for sysinfo. */
 #if defined HAS_H2
     doc["hasH2"] = 1;
-#elif defined HAS_TSLR
-    doc["hasTslr"] = 1;
 #elif defined C6_OTA_FLASHING
     doc["hasC6"] = 1;
+#endif
+#if defined(FLASHER_AP_SWS) || defined(HAS_TSLR)
+    doc["hasTslr"] = 1;
 #endif
 
 #ifdef HAS_EXT_FLASHER
@@ -359,9 +383,9 @@ void C6firmwareUpdateTask(void* parameter) {
 
     if (result) {
        wsSerial("Finished!");
-       char buffer[50];
-       snprintf(buffer,sizeof(buffer),
-                "ESP32-" SHORT_CHIP_NAME " version is now %04x", apInfo.version);
+       char buffer[80];
+       snprintf(buffer, sizeof(buffer), "AP is now type %02X (%s), firmware version %04X",
+                apInfo.type, apTypeName(apInfo.type), apInfo.version);
        wsSerial(String(buffer));
     }
     else if(apInfo.version == 0) {
@@ -370,9 +394,15 @@ void C6firmwareUpdateTask(void* parameter) {
     else {
        wsSerial("Flashing failed. :-(");
     }
-    // wsSerial("Reboot system now");
-    // wsSerial("[reboot]");
     free(urlPtr);
+
+    if (result) {
+        wsSerial("[autoreboot]");
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+        ESP.restart();
+    }
+
+    wsSerial("[reboot]");
     vTaskDelay(30000 / portTICK_PERIOD_MS);
     vTaskDelete(NULL);
 }

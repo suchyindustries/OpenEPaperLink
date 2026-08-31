@@ -69,6 +69,7 @@
 #define GICI_BLE_EPD_BW_74 0xB8
 #define GICI_BLE_EPD_BWR_74 0xB9
 #define GICI_BLE_TFT_21_BW 0xBA
+#define GICI_BLE_EPD_29_BWRY 0xBB
 #define GICI_BLE_EPD_BWR_29_SILABS 0xBD
 #define GICI_BLE_UNKNOWN 0xBF
 
@@ -93,6 +94,8 @@
 #define RESERVED_TESTING 0xFE
 #define SOLUM_NODISPLAY 0xFF
 #define ESP32_C6 0xC6
+#define TLSR_ZIGBEE_AP 0xF8
+#define TLSR_GFSK_AP 0xF9
 
 #define BWRY_29 0xC0
 #define ACEP_40 0xC1

@@ -551,10 +551,41 @@ options:
 								<button type="button" id="updateC6Btn">Update ESP32-C6</button>
 								<input type="checkbox" value="1" checked id="c6download">download latest version
 							</p>
-							<p id="updateTagtypeOption">
-								<button type="button" id="updateTagtypeBtn">Update tagtype definitions</button>
-								<input type="checkbox" value="1" id="tagtype_clean">remove unused tagtype files
+							<p id="flashTlsrOption" style="display:none;">
+								<button type="button" id="flashTlsrBtn">Flash TLSR (SWS)</button>
+								<input type="text" id="tlsrFile" value="/TLSR_AP_FW.bin" size="20">
 							</p>
+							<p id="updateTagtypeOption">
+								<button type="button" id="updateTagtypeBtn">Update tagtype definitions</button>
+								<input type="checkbox" value="1" id="tagtype_clean">remove unused tagtype files
+							</p>
+							<details id="flashpins" class="advanced" style="display:none;margin:1em 0;">
+								<summary>Flash Pinout</summary>
+								<p style="margin-top:0.5em">
+									Used <b>only while flashing</b> a C6/H2 or a TLSR. Normal
+									operation always keeps the pinout this firmware was built
+									with, so a wrong value costs a flash attempt and nothing
+									else. Defaults are the board's real wiring.
+								</p>
+								<p><label for="fpin_sws">TLSR SWS</label> <select id="fpin_sws"></select></p>
+								<p><label for="fpin_reset">Reset</label> <select id="fpin_reset"></select></p>
+								<p><label for="fpin_txd">TX</label> <select id="fpin_txd"></select></p>
+								<p><label for="fpin_rxd">RX</label> <select id="fpin_rxd"></select></p>
+								<p><label for="fpin_prog">C6/H2 prog (GPIO0)</label> <select id="fpin_prog"></select></p>
+								<p><label for="fpin_dbgtxd" title="Pin the module transmits on - the ESP receives here">C6/H2 loader: module TX</label> <select id="fpin_dbgtxd"></select></p>
+								<p><label for="fpin_dbgrxd" title="Pin the module receives on - the ESP transmits here">C6/H2 loader: module RX</label> <select id="fpin_dbgrxd"></select></p>
+								<p style="font-size:90%;opacity:0.85">
+									Names are from the module's point of view, so they cross over:
+									"module TX" is where the ESP listens. On boards that share one
+									UART for running and for flashing, these are the same two pins
+									as TX and RX above &ndash; swapped. That is allowed on purpose;
+									nothing here demands seven different pins.
+								</p>
+								<p>
+									<button type="button" id="fpinSave">Save pins</button>
+									<button type="button" id="fpinReset">Back to build defaults</button>
+								</p>
+							</details>
 						</div>
 					</div>
 					<div class="console" id="updateconsole"></div>

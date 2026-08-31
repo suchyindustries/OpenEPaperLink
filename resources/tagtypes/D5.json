@@ -1,9 +1,9 @@
 {
-	"version": 4,
-	"name": "M3 12.2\"",
-	"width": 960,
-	"height": 768,
-	"rotatebuffer": 2,
+ "version": 6,
+ "name": "GFSK10 9.7\" BWR 960x672",
+ "width": 960,
+ "height": 672,
+ "rotatebuffer": 0,
  "bpp": 2,
  "colortable": {
   "white": [
@@ -24,7 +24,8 @@
  },
  "shortlut": 0,
  "options": [
-  "button"
+  "button",
+  "led"
  ],
  "contentids": [
   1,
@@ -221,5 +222,5 @@
    ]
   }
  },
-	"zlib_compression": "27"
+ "g5_compression": "10"
 }

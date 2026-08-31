@@ -31,6 +31,7 @@
 #include "web.h"
 #ifdef HAS_BLE_WRITER
 #include "ble_writer.h"
+#include "tlsr_flasher.h"
 #endif
 
 util::Timer intervalContentRunner(seconds(1));
