@@ -1,0 +1,327 @@
+{
+ "version": 6,
+ "name": "GFSK10 2.13\" BWR 212x104",
+ "width": 212,
+ "height": 104,
+ "rotatebuffer": 1,
+ "bpp": 2,
+ "colortable": {
+  "white": [
+   255,
+   255,
+   255
+  ],
+  "black": [
+   0,
+   0,
+   0
+  ],
+  "red": [
+   255,
+   0,
+   0
+  ]
+ },
+ "g5_compression": "10",
+ "shortlut": 2,
+ "options": [
+  "button",
+  "led"
+ ],
+ "contentids": [
+  22,
+  23,
+  1,
+  2,
+  3,
+  4,
+  5,
+  7,
+  8,
+  9,
+  10,
+  11,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  27
+ ],
+ "template": {
+  "1": {
+   "weekday": [
+    106,
+    -2,
+    "Signika-SB.ttf",
+    40
+   ],
+   "date": [
+    106,
+    53,
+    "Signika-SB.ttf",
+    34
+   ]
+  },
+  "2": {
+   "fonts": [
+    "Signika-SB.ttf",
+    122,
+    122,
+    122,
+    98,
+    81,
+    65
+   ],
+   "xy": [
+    106,
+    43
+   ]
+  },
+  "4": {
+   "location": [
+    4,
+    4,
+    "fonts/bahnschrift20"
+   ],
+   "wind": [
+    201,
+    4,
+    "fonts/bahnschrift20"
+   ],
+   "temp": [
+    4,
+    53,
+    "fonts/bahnschrift30"
+   ],
+   "icon": [
+    204,
+    16,
+    50,
+    2
+   ],
+   "dir": [
+    168,
+    -10,
+    29
+   ],
+   "umbrella": [
+    136,
+    -41,
+    18
+   ]
+  },
+  "8": {
+   "location": [
+    4,
+    10,
+    "t0_14b_tf"
+   ],
+   "column": [
+    4,
+    48
+   ],
+   "day": [
+    21,
+    15,
+    "fonts/twcondensed20",
+    29,
+    77
+   ],
+   "icon": [
+    21,
+    45,
+    21
+   ],
+   "wind": [
+    13,
+    21
+   ],
+   "line": [
+    14,
+    104
+   ],
+   "ts_option": 10
+  },
+  "9": {
+   "title": [
+    1,
+    0,
+    "bahnschrift20.vlw",
+    20
+   ],
+   "items": 5,
+   "line": [
+    1,
+    20,
+    "REFSAN12.vlw"
+   ],
+   "desc": [
+    0,
+    4,
+    "",
+    1
+   ]
+  },
+  "10": {
+   "title": [
+    107,
+    4,
+    "fonts/bahnschrift20"
+   ],
+   "pos": [
+    107,
+    22
+   ]
+  },
+  "11": {
+   "mode": 0,
+   "days": 1,
+   "title": [
+    4,
+    2,
+    "fonts/bahnschrift20"
+   ],
+   "date": [
+    208,
+    2
+   ],
+   "items": 5,
+   "red": [
+    0,
+    17,
+    212,
+    11
+   ],
+   "line": [
+    4,
+    26,
+    12,
+    "t0_14b_tf",
+    36
+   ]
+  },
+  "16": {
+   "location": [
+    4,
+    4,
+    "fonts/bahnschrift20"
+   ],
+   "title": [
+    177,
+    9,
+    "glasstown_nbp_tf"
+   ],
+   "cols": [
+    1,
+    102,
+    10,
+    "glasstown_nbp_tf"
+   ],
+   "bars": [
+    4,
+    90,
+    8
+   ]
+  },
+  "21": [
+   {
+    "text": [
+     4,
+     4,
+     "OpenEpaperLink AP",
+     "bahnschrift20",
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "text": [
+     4,
+     41,
+     "IP address:",
+     "t0_14b_tf",
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "text": [
+     86,
+     41,
+     "{ap_ip}",
+     "t0_14b_tf",
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "text": [
+     4,
+     57,
+     "Channel:",
+     "t0_14b_tf",
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "text": [
+     86,
+     57,
+     "{ap_ch}",
+     "t0_14b_tf",
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "text": [
+     4,
+     73,
+     "Tag count:",
+     "t0_14b_tf",
+     1,
+     0,
+     0
+    ]
+   },
+   {
+    "text": [
+     86,
+     73,
+     "{ap_tagcount}",
+     "t0_14b_tf",
+     1,
+     0,
+     0
+    ]
+   }
+  ],
+  "27": {
+   "bars": [
+    6,
+    206,
+    73,
+    9
+   ],
+   "time": [
+    "tahoma9.vlw"
+   ],
+   "yaxis": [
+    "tahoma9.vlw",
+    0,
+    6
+   ],
+   "head": [
+    "calibrib16.vlw"
+   ]
+  }
+ }
+}

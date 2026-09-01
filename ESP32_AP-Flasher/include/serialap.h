@@ -29,6 +29,13 @@ struct APInfoS {
 
 extern struct APInfoS apInfo;
 
+/* Readable name for an AP type byte, for logs that would otherwise print a
+   bare number. The compile time SHORT_CHIP_NAME cannot do this job: a board
+   that can carry either module has it fixed to one of them, so it says "C6"
+   even while a TLSR is being flashed. apInfo.type is what the module itself
+   reported, so it is the only value that is actually true. */
+const char *apTypeName(uint8_t type);
+
 enum ApSerialState {
     SERIAL_STATE_NONE,
     SERIAL_STATE_INITIALIZED,

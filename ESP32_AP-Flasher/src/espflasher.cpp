@@ -126,6 +126,27 @@ esp_loader_error_t flash_binary(String &file_path, size_t address) {
     return ESP_LOADER_SUCCESS;
 }
 
+/* Where a manifest entry is staged on the local filesystem.
+
+   LittleFS as configured here allows 32 characters per name - measured, not
+   assumed: 32 works, 33 fails to open. Upstream's
+   firmware_C6_Uart0.json still names OpenEPaperLink_esp32_C6_Uart0.bin, which
+   is exactly 33, so downloading it fails with "file open error" and no amount
+   of retrying helps. The plain C6 build is 27 and slips through, which is why
+   only the Uart0 variant is affected. Our copy is renamed to 32 characters,
+   but an access point pointed at the upstream repository still meets the long
+   name - which is what this is for.
+
+   The remote name stays untouched - the URL has to match the repository. Only
+   the local copy is shortened, and from the front: the tail carries the
+   variant and the extension, which is what has to stay distinguishable. */
+#define LFS_NAME_MAX_HERE 32
+
+static String stagingPath(const String &remote) {
+    if (remote.length() <= LFS_NAME_MAX_HERE) return "/" + remote;
+    return "/" + remote.substring(remote.length() - LFS_NAME_MAX_HERE);
+}
+
 bool downloadAndWriteBinary(String &filename, const char *url) {
     HTTPClient binaryHttp;
     bool Ret = false;
@@ -204,7 +225,7 @@ bool downloadAndWriteBinary(String &filename, const char *url) {
 }
 
 bool FlashC6_H2(const char *RepoUrl) {
-    String JsonFilename = "/firmware_" SHORT_CHIP_NAME ".json" ;
+    String JsonFilename = "/firmware_" OTA_FW_JSON ".json" ;
     bool Ret = false;
     bool bLoaderInit = false;
     bool bDownload = strlen(RepoUrl) > 0;
@@ -241,8 +262,16 @@ bool FlashC6_H2(const char *RepoUrl) {
 
         JsonArray jsonArray = jsonDoc.as<JsonArray>();
         for(JsonObject obj : jsonArray) {
-            String filename = "/" + obj["filename"].as<String>();
-            String binaryUrl = RepoUrl + filename;
+            String remote = obj["filename"].as<String>();
+            String remotePath = "/" + remote;          /* unveraendert fuer die URL */
+            String filename = stagingPath(remote);     /* ggf. gekuerzt, nur lokal */
+            String binaryUrl = RepoUrl + remotePath;
+
+            /* The manifest carries a version per file and nothing used to look
+               at it. Printing it is the only way to tell from the log which
+               build actually went onto the chip. */
+            String ver = obj["version"].as<String>();
+            wsSerial("  " + remote + (ver.length() ? " (version " + ver + ")" : ""));
 
             for(retry = 0; retry < 10; retry++) {
                 if(downloadAndWriteBinary(filename, binaryUrl.c_str())) {
@@ -264,13 +293,20 @@ bool FlashC6_H2(const char *RepoUrl) {
 
     if(Ret == true) do {
        Ret = false;
+        /* Read the pins out first. The local below is called "config" as
+           well and would shadow the global one inside its own initialiser -
+           which compiles to nonsense rather than an error in some contexts. */
+        const int8_t pinRx = ::config.flashPinDbgTxd;
+        const int8_t pinTx = ::config.flashPinDbgRxd;
+        const int8_t pinRst = ::config.flashPinReset;
+        const int8_t pinProg = ::config.flashPinProg;
         const loader_esp32_config_t config = {
             .baud_rate = 115200,
             .uart_port = FLASHER_DEBUG_PORT,
-            .uart_rx_pin = FLASHER_DEBUG_TXD,
-            .uart_tx_pin = FLASHER_DEBUG_RXD,
-            .reset_trigger_pin = FLASHER_AP_RESET,
-            .gpio0_trigger_pin = FLASHER_DEBUG_PROG,
+            .uart_rx_pin = (gpio_num_t)pinRx,
+            .uart_tx_pin = (gpio_num_t)pinTx,
+            .reset_trigger_pin = (gpio_num_t)pinRst,
+            .gpio0_trigger_pin = (gpio_num_t)pinProg,
         };
 
         bLoaderInit = true;
@@ -284,17 +320,22 @@ bool FlashC6_H2(const char *RepoUrl) {
             break;
         }
 
+#ifdef ESP_CHIP_TYPE
         if(esp_loader_get_target() != ESP_CHIP_TYPE) {
             wsSerial("Connected to wrong ESP32 type");
             break;
         }
+#else
+        /* Boards whose radio co-processor is not an ESP (a TLSR825x, written
+           over SWS) define no chip type - there is nothing to compare. */
+#endif
         wsSerial("Connected to ESP32-" SHORT_CHIP_NAME);
         int maxRetries = 5;
         esp_loader_error_t err;
 
         JsonArray jsonArray = jsonDoc.as<JsonArray>();
         for(JsonObject obj : jsonArray) {
-            String filename = "/" + obj["filename"].as<String>();
+            String filename = stagingPath(obj["filename"].as<String>());
             const char *addressStr = obj["address"];
             uint32_t address = strtoul(addressStr, NULL, 16);
 

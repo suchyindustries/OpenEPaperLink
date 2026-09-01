@@ -336,6 +336,13 @@ void initAPconfig() {
     config.ble = APconfig["ble"].is<uint8_t>() ? APconfig["ble"] : 0;
     config.discovery = APconfig["discovery"].is<uint8_t>() ? APconfig["discovery"] : 0;
     config.showtimestamp = APconfig["showtimestamp"].is<uint8_t>() ? APconfig["showtimestamp"] : 0;
+    config.flashPinSws    = APconfig["flashpin_sws"].is<int8_t>()    ? APconfig["flashpin_sws"].as<int8_t>()    : (int8_t)FLASH_DEF_SWS;
+    config.flashPinReset  = APconfig["flashpin_reset"].is<int8_t>()  ? APconfig["flashpin_reset"].as<int8_t>()  : (int8_t)FLASH_DEF_RESET;
+    config.flashPinTxd    = APconfig["flashpin_txd"].is<int8_t>()    ? APconfig["flashpin_txd"].as<int8_t>()    : (int8_t)FLASH_DEF_TXD;
+    config.flashPinRxd    = APconfig["flashpin_rxd"].is<int8_t>()    ? APconfig["flashpin_rxd"].as<int8_t>()    : (int8_t)FLASH_DEF_RXD;
+    config.flashPinProg   = APconfig["flashpin_prog"].is<int8_t>()   ? APconfig["flashpin_prog"].as<int8_t>()   : (int8_t)FLASH_DEF_PROG;
+    config.flashPinDbgTxd = APconfig["flashpin_dbgtxd"].is<int8_t>() ? APconfig["flashpin_dbgtxd"].as<int8_t>() : (int8_t)FLASH_DEF_DBGTXD;
+    config.flashPinDbgRxd = APconfig["flashpin_dbgrxd"].is<int8_t>() ? APconfig["flashpin_dbgrxd"].as<int8_t>() : (int8_t)FLASH_DEF_DBGRXD;
 #ifdef BLE_ONLY
         config.ble = true;
 #endif
@@ -370,6 +377,13 @@ void saveAPconfig() {
     APconfig["timezone"] = config.timeZone;
     APconfig["sleeptime1"] = config.sleepTime1;
     APconfig["sleeptime2"] = config.sleepTime2;
+    APconfig["flashpin_sws"] = config.flashPinSws;
+    APconfig["flashpin_reset"] = config.flashPinReset;
+    APconfig["flashpin_txd"] = config.flashPinTxd;
+    APconfig["flashpin_rxd"] = config.flashPinRxd;
+    APconfig["flashpin_prog"] = config.flashPinProg;
+    APconfig["flashpin_dbgtxd"] = config.flashPinDbgTxd;
+    APconfig["flashpin_dbgrxd"] = config.flashPinDbgRxd;
     APconfig["ble"] = config.ble;
     APconfig["repo"] = config.repo;
     APconfig["env"] = config.env;

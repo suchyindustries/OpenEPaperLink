@@ -49,6 +49,15 @@ struct espSetChannelPower curChannel = {0, 11, 10};
 volatile uint32_t lastAPActivity = 0;
 struct APInfoS apInfo;
 
+const char *apTypeName(uint8_t type) {
+    switch (type) {
+        case ESP32_C6:        return "ESP32-C6";
+        case TLSR_ZIGBEE_AP:  return "TLSR Zigbee 802.15.4";  /* 0xF8 */
+        case TLSR_GFSK_AP:    return "TLSR GFSK";        /* 0xF9 */
+        default:              return "unknown";
+    }
+}
+
 volatile ApSerialState gSerialTaskState;
 
 struct rxCmd {

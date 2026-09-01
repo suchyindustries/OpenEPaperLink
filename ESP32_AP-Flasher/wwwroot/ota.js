@@ -9,25 +9,43 @@ let env = '', currentVer = '', currentBuildtime = 0;
 let buttonState = false;
 let gIsC6 = false;
 let gIsH2 = false;
+let gIsTLSR = false;
+let gBinDir = '';
 let gModuleType = '';
 let gShortName = '';
 let gCurrentRfVer = 0;
+// What this board can actually flash. A radio co-processor is either an H2 or
+// a C6, but an SWS wired TLSR is independent of that - a board with both can
+// flash either, so this is a list rather than a single choice. The TLSR has two
+// firmwares that are not interchangeable and each gets its own entry.
+let gTargets = [];
 
 export async function initUpdate() {
-    if (apConfig.C6 == 1) {
-        gIsC6 = true;
-        gModuleType = "ESP32-C6";
-        gShortName = "C6";
-    }
-    else if (apConfig?.H2 && apConfig.H2 == 1) {
+    gTargets = [];
+    initFlashPins();
+    if (apConfig?.H2 && apConfig.H2 == 1) {
         gIsH2 = true;
-        gModuleType = "ESP32-H2";
-        gShortName = "H2";
+        gTargets.push({ name: "ESP32-H2", short: "H2", dir: "ESP32-H2", ep: "update_c6" });
+    } else if (apConfig.C6 == 1) {
+        gIsC6 = true;
+        gTargets.push({ name: "ESP32-C6", short: "C6", dir: "ESP32-C6", ep: "update_c6" });
     }
-    else {
-        gModuleType = "Unknown"
+    if (apConfig?.TLSR && apConfig.TLSR == 1) {
+        gIsTLSR = true;
+        // Zigbee first: it is what most tags in the field run, so it is the
+        // one offered by default. The GFSK build is the special case.
+        gTargets.push({ name: "TLSR Zigbee 802.15.4", short: "TLSR", dir: "TLSR", ep: "flash_tlsr", aptype: "F8" });
+        gTargets.push({ name: "TLSR GFSK", short: "TLSR", dir: "TLSR", ep: "flash_tlsr", aptype: "F9" });
     }
-    $('#radio_release_title').innerHTML = gModuleType + " Firmware";
+
+    // The first entry stays the "primary" one so the release table below keeps
+    // working unchanged; the per-target buttons are rendered separately.
+    const primary = gTargets.length ? gTargets[0] : null;
+    gModuleType = primary ? primary.name : "Unknown";
+    gShortName = primary ? primary.short : "";
+    gBinDir = primary ? primary.dir : "";
+    $('#radio_release_title').innerHTML =
+        (gTargets.length ? gTargets.map(t => t.name).join(" &middot; ") : gModuleType) + " Firmware";
 
     const response = await fetch("version.txt");
     let filesystemversion = await response.text();
@@ -78,7 +96,12 @@ export async function initUpdate() {
             let hex_ver = sdata.ap_version && !isNaN(sdata.ap_version)
                 ? ('0000' + sdata.ap_version.toString(16)).slice(-4)
                 : 'unknown';
-            print(`${gModuleType} version:   ${hex_ver}`);
+            // Prefer what the module reported over the label the build guessed:
+            // a board that can carry either radio has the latter fixed to one.
+            const label = sdata.ap_type ? sdata.ap_typename : gModuleType;
+            const type = sdata.ap_type
+                ? ` (type ${('00' + sdata.ap_type.toString(16).toUpperCase()).slice(-2)})` : '';
+            print(`${label} version:   ${hex_ver}${type}`);
         }
         print("--------------------------", "gray");
         env = apConfig.env || sdata.env;
@@ -89,6 +112,10 @@ export async function initUpdate() {
         currentBuildtime = sdata.buildtime;
         gCurrentRfVer = sdata.ap_version;
         if (sdata.rollback) $("#rollbackOption").style.display = 'block';
+        // Without an SWS flasher this button has nothing to talk to: the
+        // firmware behind /flash_tlsr is not even compiled in on such a
+        // board, so pressing it could only ever fail.
+        if (sdata.has_sws_flasher) $("#flashTlsrOption").style.display = 'block';
         $('#environment').value = env;
     }
 
@@ -213,21 +240,35 @@ export async function initUpdate() {
         const tableHeader2 = document.createElement('tr');
         tableHeader2.innerHTML = '<th>Firmware</th><th><center>Update</center></th>';
         table2.appendChild(tableHeader2);
-        const tableRow = document.createElement('tr');
-        tablerow = '<td title="manual upload, make sure all four files are present">Binaries from <a href="/edit" target="littlefs">file system</a></td>';
-        tablerow += `<td><button type="button" onclick="otamodule.updateC6H2('')">${gModuleType}</button></td>`;
-        tableRow.innerHTML = tablerow;
-        table2.appendChild(tableRow);
     }
-    {
-        const tableRow = document.createElement('tr');
-        const Url = "https://raw.githubusercontent.com/" + repo +
-            "/master/binaries/ESP32-" + gShortName +
-            "/firmware_" + gShortName + ".json";
 
-        tablerow = `<td><a href="https://github.com/${repo}/tree/master/binaries/ESP32-${gShortName}/" target="_new">Latest version from repo</a></td>`;
-        tablerow += `<td><button type="button" onclick="otamodule.updateC6H2('${Url}')">${gModuleType}</button></td>`;
-        tableRow.innerHTML = tablerow;
+    // One row per target the board can reach. A TLSR appears twice, because
+    // its two firmwares are different radios and switching between them is the
+    // point: GFSK on one side, 802.15.4/Zigbee on the other.
+    for (const t of gTargets) {
+        const arg = t.aptype ? `,'${t.aptype}'` : '';
+        {
+            const tableRow = document.createElement('tr');
+            tableRow.innerHTML =
+                `<td title="manual upload to the file system">${t.name} from ` +
+                `<a href="/edit" target="littlefs">file system</a></td>` +
+                `<td><button type="button" onclick="otamodule.updateC6H2(''${arg})">Flash</button></td>`;
+            table2.appendChild(tableRow);
+        }
+        {
+            const Url = "https://raw.githubusercontent.com/" + repo +
+                "/master/binaries/" + t.dir + "/firmware_" + t.short + ".json";
+            const tableRow = document.createElement('tr');
+            tableRow.innerHTML =
+                `<td>${t.name} from <a href="https://github.com/${repo}/tree/master/binaries/${t.dir}/" ` +
+                `target="_new">repo</a></td>` +
+                `<td><button type="button" onclick="otamodule.updateC6H2('${Url}'${arg})">Flash</button></td>`;
+            table2.appendChild(tableRow);
+        }
+    }
+    if (!gTargets.length) {
+        const tableRow = document.createElement('tr');
+        tableRow.innerHTML = '<td colspan="2">No flashable radio module on this board</td>';
         table2.appendChild(tableRow);
     }
     $('#radio_releasetable1').innerHTML = "";
@@ -452,7 +493,12 @@ $('#rollbackBtn').onclick = function () {
     disableButtons(false);
 }
 
-export async function updateC6H2(Url) {
+function target_name(apType) {
+    const t = gTargets.find(x => (x.aptype || '') === (apType || ''));
+    return t ? t.name : gModuleType;
+}
+
+export async function updateC6H2(Url, apType) {
     if (running) return;
     disableButtons(true);
     running = true;
@@ -462,10 +508,14 @@ export async function updateC6H2(Url) {
     consoleDiv.scrollTop = consoleDiv.scrollHeight;
     const formData = new FormData();
 
-    print("Flashing " + gModuleType + " ...");
+    print("Flashing " + (target_name(apType)) + " ...");
     formData.append('url', ReleaseUrl);
+    if (apType) formData.append('aptype', apType);
 
-    fetch("update_c6", {
+    // Which endpoint depends on the target, not on the board: an ESP
+    // co-processor goes through the serial loader, a TLSR over SWS.
+    const target = gTargets.find(t => (t.aptype || '') === (apType || '')) || gTargets[0];
+    fetch(target && target.ep ? target.ep : "update_c6", {
         method: "POST",
         body: formData
     })
@@ -571,6 +621,14 @@ export function print(line, color = "white") {
         newLine.style.color = color;
         if (line == "[reboot]") {
             newLine.innerHTML = "<button onclick=\"otamodule.reboot()\">Reboot</button>";
+        } else if (line == "[autoreboot]") {
+            // The AP restarts by itself after flashing a co-processor. Nothing
+            // announces that to the browser - the socket simply dies - so the
+            // page would sit there looking busy forever. Reload once the AP has
+            // had time to boot and rejoin the network.
+            newLine.textContent = "Rebooting now... reloading this page in 8 seconds.";
+            newLine.style.color = "yellow";
+            setTimeout(() => { location.reload(); }, 8000);
         } else {
             newLine.textContent = line;
         }
@@ -738,3 +796,106 @@ async function fetchAndCheckTagtypes(cleanup) {
 function normalizeVersion(version) {
     return version.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 }
+
+// --- Co-processor flashing pins -------------------------------------------
+// These apply only while flashing a C6/H2 or a TLSR. Normal operation always
+// keeps the pinout the firmware was built with, so a wrong choice here costs a
+// flash attempt and never the running access point.
+const FPIN_FIELDS = ['sws', 'reset', 'txd', 'rxd', 'prog', 'dbgtxd', 'dbgrxd'];
+let gFpinDefaults = null;
+
+// ESP32-S3 GPIOs that may be offered. 22-25 do not exist, 26-37 carry the SPI
+// flash and the octal PSRAM, 19/20 are USB - offering any of those is a way to
+// produce a board that no longer boots or can no longer be reached. Strapping
+// pins are offered but marked; some boards legitimately use them.
+const FPIN_STRAPPING = [0, 3, 45, 46];
+
+function fpinChoices(current) {
+    const out = [-1];
+    for (let g = 0; g <= 21; g++) if (g !== 19 && g !== 20) out.push(g);
+    for (let g = 38; g <= 48; g++) out.push(g);
+    // Never make an existing value unrepresentable: a board may be wired to a
+    // pin this list does not offer, and dropping it would rewrite the
+    // configuration behind the user's back on the next save.
+    if (current !== null && current !== undefined && !out.includes(current)) {
+        out.push(current);
+        out.sort((a, b) => a - b);
+    }
+    return out;
+}
+
+function fpinFill(sel, current) {
+    sel.innerHTML = '';
+    for (const g of fpinChoices(current)) {
+        const o = document.createElement('option');
+        o.value = g;
+        o.textContent = g < 0 ? 'not present'
+            : 'GPIO ' + g + (FPIN_STRAPPING.includes(g) ? ' (strapping)' : '');
+        sel.appendChild(o);
+    }
+    if (current !== null && current !== undefined) sel.value = current;
+}
+
+async function initFlashPins() {
+    const box = document.getElementById('flashpins');
+    if (!box) return;
+    let sys = {};
+    try {
+        sys = await (await fetch('sysinfo')).json();
+    } catch (e) {
+        return;
+    }
+    gFpinDefaults = sys.flashpin_defaults || null;
+    let any = false;
+    for (const f of FPIN_FIELDS) {
+        const sel = document.getElementById('fpin_' + f);
+        if (!sel) continue;
+
+        // A build default of -1 means this board has no such pin, and the code
+        // that would use it is not even compiled in - the SWS pin on a board
+        // without TLSR support, for instance. Offering the row anyway would
+        // invite setting something that can never take effect, so hide it.
+        const def = gFpinDefaults ? parseInt(gFpinDefaults[f], 10) : -1;
+        const row = sel.closest('p');
+        // The SWS row goes by whether the firmware has an SWS flasher at all,
+        // not by whether a pin happens to be configured. Without the flasher
+        // there is nothing the value could ever reach.
+        const unavailable = (f === 'sws') ? !sys.has_sws_flasher : (def < 0);
+        if (unavailable) {
+            if (row) row.style.display = 'none';
+            continue;
+        }
+        if (row) row.style.display = '';
+
+        let v = apConfig['flashpin_' + f];
+        if (v === undefined) v = def;
+        v = parseInt(v, 10);
+        fpinFill(sel, v);
+        any = true;
+    }
+    // A board without a flashable co-processor has nothing to configure.
+    box.style.display = any ? '' : 'none';
+
+    const saveBtn = document.getElementById('fpinSave');
+    if (saveBtn) saveBtn.onclick = function () {
+        const fd = new FormData();
+        for (const f of FPIN_FIELDS) {
+            const sel = document.getElementById('fpin_' + f);
+            if (sel && sel.value !== '') fd.append('flashpin_' + f, sel.value);
+        }
+        fetch('save_apcfg', { method: 'POST', body: fd })
+            .then(r => r.text())
+            .then(() => print('Flashing pins saved.'))
+            .catch(e => print('Error saving pins: ' + e, 'red'));
+    };
+    const resetBtn = document.getElementById('fpinReset');
+    if (resetBtn) resetBtn.onclick = function () {
+        if (!gFpinDefaults) return;
+        for (const f of FPIN_FIELDS) {
+            const sel = document.getElementById('fpin_' + f);
+            if (sel && gFpinDefaults[f] !== undefined) fpinFill(sel, parseInt(gFpinDefaults[f], 10));
+        }
+        print('Back to build defaults - press "Save pins" to keep it.');
+    };
+}
+
