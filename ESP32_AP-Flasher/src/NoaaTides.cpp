@@ -305,11 +305,11 @@ int NoaaTides::PlotNoaaTides(class DrawOWM * &owm,time_t Start,time_t Duration)
             TideHeight = String(Height,2) + " ft";
             uint16_t HeighWidth = owm->getStringWidth(TideHeight);
             uint16_t xTideHeight = x - (HeighWidth / 2);
-            if(xTideHeight - (HeighWidth / 2) < GraphLeft) {
+            if(xTideHeight < GraphLeft) {
                LOG("Height label moved right to fit\n");
                xTideHeight = GraphLeft;
             }
-            else if(x + (HeighWidth / 2) >= GraphLeft + GraphWidth) {
+            else if(x >= GraphLeft + GraphWidth) {
                LOG("Height label moved left to fit\n");
                xTideHeight = GraphWidth - HeighWidth;
             }
