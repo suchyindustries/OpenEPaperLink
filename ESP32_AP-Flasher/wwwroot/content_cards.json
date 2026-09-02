@@ -189,16 +189,6 @@
         }
       },
       {
-        "key": "forecast_type",
-        "name": "Style",
-        "desc": "Select forecast data provider and screen layout style",
-        "type": "apiselect",
-        "options": {
-          "0": "-open-metro.com",
-          "1": "openweathermap.org"
-        }
-      },
-      {
         "key": "#lat",
         "name": "Lat",
         "desc": "Latitude (set automatic when generating image)",
@@ -215,6 +205,36 @@
         "name": "Time zone",
         "desc": "Time zone (set automatic when generating image)",
         "type": "ro"
+      },
+      {
+        "key": "forecast_type",
+        "name": "Style",
+        "desc": "Select forecast data provider and screen layout style",
+        "type": "apiselect",
+        "options": {
+          "0": "-open-metro.com",
+          "1": "openweathermap.org"
+        }
+      },
+      {
+	"key": "StationID",
+	"name": "NOAA Station ID (optional)",
+	"desc": "Tide prediction station ID or location to search. See https://tidesandcurrents.noaa.gov/tide_predictions.html",
+	"type": "noaaselect",
+	"api": "1"
+      },
+      {
+	"key": "TideDisplay",
+	"name": "Tide Values",
+	"desc": "What values to display",
+	"type": "select",
+        "options": {
+          "0": "None",
+          "1": "High & Low Tide times",
+          "2": "Tide Level Graph",
+          "3": "Tide times and Graph"
+        },
+	"api": "1"
       }
     ]
   },

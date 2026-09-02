@@ -1146,7 +1146,7 @@ function contentselected() {
 						}
 					}
 					else {
-						options = element.options
+						options = element.options;
 					}
 
 					for (const key in options) {
@@ -1161,14 +1161,22 @@ function contentselected() {
 						}
 						input.appendChild(optionElement);
 					}
-					if (element.type == 'apiselect' && apConfig.owm_api_key == 0) {
-						input.disabled = true;
-					}
 					break;
 				case 'geoselect':
 					input.type = "text";
 					input.classList.add("geoselect");
 					input.setAttribute("autocomplete", "off");
+					break;
+
+				case 'noaaselect':
+					input.type = "text";
+					input.classList.add("noaaselect");
+					input.setAttribute("autocomplete", "off");
+					break;
+          
+				case 'checkbox':
+					input.type = "checkbox";
+					input.classList.add("checkbox");
 					break;
 			}
 			input.id = 'opt' + element.key;
@@ -1183,7 +1191,41 @@ function contentselected() {
 				resultsContainer.id = 'georesults';
 				p.appendChild(resultsContainer);
 			}
-			$('#customoptions').appendChild(p);
+			else if (element.type == 'noaaselect') {
+				input.addEventListener('input', debounce(NoaaSearch, 300));
+				const resultsContainer = document.createElement('div');
+				resultsContainer.id = 'georesults';
+				p.appendChild(resultsContainer);
+			}
+			else if (element.type == 'apiselect') {
+				input.addEventListener('change', handleApiChange);
+			}
+
+			if(element.api) {
+				let DivName = 'ApiDiv' + element.api;
+				document.getElementById(DivName).appendChild(p);
+			}
+			else {
+				$('#customoptions').appendChild(p);
+			}
+
+			if (element.type == 'apiselect' ) {
+				options = element.options;
+				for (const key in options) {
+				// create div for options specific to this API 
+					let apiOptionsDiv = document.createElement('div');
+					apiOptionsDiv.id = 'ApiDiv' + key;
+					apiOptionsDiv.style.display = 'none';
+
+					$('#customoptions').appendChild(apiOptionsDiv);
+				 // disable owm API unless key is set
+					if(options[key] == "openweathermap.org" && apConfig.owm_api_key == 0) {
+						optionElement.selected = false;
+						optionElement.disabled = true;
+					}
+				}
+				handleApiChange();
+			}
 		});
 	}
 	paintShow = false;
@@ -2023,6 +2065,21 @@ async function searchLocations() {
 	}
 }
 
+async function NoaaSearch() {
+	const query = $(".noaaselect").value.trim();
+	if (query.length < 2) {
+		$('#georesults').innerHTML = '';
+		return;
+	}
+
+	try {
+		const response = await fetch(`https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/tidepredstations.json?q=${query}`);
+		const data = await response.json();
+		displaygeoresults(data.stationList);
+	} catch (error) {
+		console.error('Error fetching data:', error);
+	}
+}
 function displayResults(results) {
 	$('#georesults').innerHTML = '';
 	$('#georesults').style.top = $(".geoselect").offsetTop + $(".geoselect").offsetHeight + "px";
@@ -2038,12 +2095,51 @@ function displayResults(results) {
 	}
 }
 
+function displaygeoresults(results) {
+	$('#georesults').innerHTML = '';
+	$('#georesults').style.top = $(".noaaselect").offsetTop + $(".noaaselect").offsetHeight + "px";
+	$('#georesults').style.left = $(".noaaselect").offsetLeft + 'px';
+	if (results) {
+		results.forEach(result => {
+			const option = document.createElement('div');
+			option.textContent = result.etidesStnName;
+			option.addEventListener('click', () => selectNoaaLocation(result));
+			$('#georesults').appendChild(option);
+		});
+	}
+}
+
 function selectLocation(location) {
 	$(".geoselect").value = location.name;
 	document.getElementById('opt#lat').value = location.latitude;
 	document.getElementById('opt#lon').value = location.longitude;
 	if (document.getElementById('opt#tz')) document.getElementById('opt#tz').value = location.timezone;
 	$('#georesults').innerHTML = '';
+}
+
+function selectNoaaLocation(location) {
+	$(".noaaselect").value = location.stationId;
+	$('#georesults').innerHTML = '';
+}
+
+function handleApiChange() {
+  ApiOptions = document.getElementById('optforecast_type');
+  selected = ApiOptions.selectedIndex;
+  for (option of ApiOptions.options) {
+	  let DivName = 'ApiDiv' + option.value;
+	  OptionDiv = document.getElementById(DivName);
+	  let DivHeight;
+	  let DivDisplay;
+
+	  if(option.value == selected) {
+		  DivDisplay = 'block';
+	  }
+	  else {
+		  DivDisplay = 'none';
+		  DivHeight = '0px';
+	  }
+	  OptionDiv.style.display = DivDisplay;
+  }
 }
 
 function debounce(func, delay) {

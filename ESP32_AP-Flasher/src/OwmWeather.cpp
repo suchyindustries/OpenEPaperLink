@@ -25,7 +25,7 @@
 
 
 bool HttpQuery(String &url,String &Response);
-int AddNoaaTides(class NoaaTides *,time_t &,OwmConfig &,String &);
+void AddNoaaTides(class NoaaTides *,time_t &,OwmConfig &,String &);
 
 LocaleStrings_t Strings;
 typedef struct {
@@ -121,6 +121,8 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
    OwmConfig Config;
    class DrawOWM *owm = NULL;
    class NoaaTides *pNoaaTides = NULL;
+   int TideDisplay = 0;
+   int TideEvents = 0;
 
    char *TzSave = getenv("TZ");
    String IANA_tz = cfgobj["#tz"];
@@ -231,31 +233,39 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
             break;
       }
 
-      if(cfgobj["StationID"]) {
+      String StationID = cfgobj["StationID"].as<String>();
+      LOG("StationID %s\n",StationID.c_str());
+      TideDisplay = cfgobj["TideDisplay"].as<int>();
+      LOG("TideDisplay 0x%x\n",TideDisplay);
+      if(TideDisplay && !StationID.isEmpty()) {
+         LOG("StationID %s\n",StationID.c_str());
          pNoaaTides = new NoaaTides();
-         String StationID = cfgobj["StationID"].as<String>();
-         LOG("Calling AddNoaaTides for Station %s\n",StationID.c_str());
-         if(AddNoaaTides(pNoaaTides,Now,Config,StationID)) {
-         // Got tide values
-            if(Config.DisplayFormat == FORMAT_640X384) {
-            // Replace AirQuality & Uvi with tides
-               Config.PosAirQuality = -1;
-               Config.PosUvi        = -1;
-               Config.PosTide1      = 4;
-               Config.PosTide2      = 5;
-            }
-            else {
-            // Replace Pressure & Dewpoint  with tides
-               Config.PosDewpoint = -1;
-               Config.PosPressure = -1;
-               Config.PosTide1    = 8;
-               Config.PosTide2    = 9;
-            }
+         TideEvents = pNoaaTides->GetNoaaTides(StationID,Now);
+         LOG("Got %d events\n",TideEvents);
+         if(TideEvents < 1) {
+         // GetNoaaTides failed
+            delete pNoaaTides;
+            TideDisplay = 0;
+            pNoaaTides = NULL;
+         }
+      }
+
+      if(TideDisplay & 1) {
+         if(Config.DisplayFormat == FORMAT_640X384) {
+         // Replace AirQuality & Uvi with tides
+            Config.PosAirQuality = -1;
+            Config.PosUvi        = -1;
+            Config.PosTide1      = 4;
+            Config.PosTide2      = 5;
          }
          else {
-            delete pNoaaTides;
-            pNoaaTides == NULL;
+         // Replace Pressure & Dewpoint  with tides
+            Config.PosDewpoint = -1;
+            Config.PosPressure = -1;
+            Config.PosTide1    = 8;
+            Config.PosTide2    = 9;
          }
+         AddNoaaTides(pNoaaTides,Now,Config,StationID);
       }
 
       Config.xOffset = (imageParams.width - Config.DisplayWidth) / 2;
@@ -345,7 +355,8 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
          Config.bDisplayAlerts = true;
       }
       owm->DrawIt();
-      if(pNoaaTides != NULL) {
+
+      if(TideDisplay & 2) {
          pNoaaTides->PlotNoaaTides(owm,Now);
       }
       if(owm != NULL) {
@@ -391,37 +402,24 @@ bool HttpQuery(String &url,String &Response)
    return Ret;
 }
 
-//   String StationID = "8446613"; // Wellfleet
-//   String StationID = "9415009"; // San Pedro
-int AddNoaaTides(class NoaaTides *pNoaaTides,time_t &Now,OwmConfig &Config,String &StationID)
+void AddNoaaTides(class NoaaTides *pNoaaTides,time_t &Now,OwmConfig &Config,String &StationID)
 {
-   int Ret = 0;
-
-   LOG("StationID %s\n",StationID.c_str());
-   int Events = pNoaaTides->GetNoaaTides(StationID,Now);
-   LOG("Got %d events\n",Events);
-   if(Events > 0) {
-      int LowTideEvent;
-      int HighTideEvent;
-      if(pNoaaTides->Tides[1].LowTide) {
-      // Next Tide is a low tide
-         LowTideEvent = 1;
-         HighTideEvent = 2;
-      }
-      else {
-      // Next Tide is a high tide
-         LowTideEvent = 2;
-         HighTideEvent = 1;
-      }
-      Config.LowTide = pNoaaTides->Tides[LowTideEvent].Time;
-      Config.LowTideHeight = pNoaaTides->Tides[LowTideEvent].Height;
-      Config.HighTide = pNoaaTides->Tides[HighTideEvent].Time;
-      Config.HighTideHeight = pNoaaTides->Tides[HighTideEvent].Height;
-      Ret = Events;
+   int LowTideEvent;
+   int HighTideEvent;
+   if(pNoaaTides->Tides[1].LowTide) {
+   // Next Tide is a low tide
+      LowTideEvent = 1;
+      HighTideEvent = 2;
    }
-
-   LOG("Returning %d\n",Ret);
-   return Ret;
+   else {
+   // Next Tide is a high tide
+      LowTideEvent = 2;
+      HighTideEvent = 1;
+   }
+   Config.LowTide = pNoaaTides->Tides[LowTideEvent].Time;
+   Config.LowTideHeight = pNoaaTides->Tides[LowTideEvent].Height;
+   Config.HighTide = pNoaaTides->Tides[HighTideEvent].Time;
+   Config.HighTideHeight = pNoaaTides->Tides[HighTideEvent].Height;
 }
 
 #endif // WITHOUT_OWM
