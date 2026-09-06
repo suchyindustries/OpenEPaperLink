@@ -190,6 +190,7 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
       Config.TimeFormat = "%l:%M %P";
       Config.DateFormat = "%a, %B %e";
       Config.inHumidity = NAN;
+      Config.bDisplayAlerts = true; // default
 
       Config.PosSunrise      = 0;
       Config.PosSunset       = 1;
@@ -351,9 +352,7 @@ bool OwmWeather(TFT_eSprite &spr, JsonObject &cfgobj, const tagRecord *taginfo, 
             owm->SetLocale(&Strings);
          } while(false);
       }
-      else {
-         Config.bDisplayAlerts = true;
-      }
+
       owm->DrawIt();
 
       if(TideDisplay & 2) {
